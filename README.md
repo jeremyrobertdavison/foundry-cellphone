@@ -46,12 +46,12 @@ For a Foundry release asset, create a ZIP whose root contains `module.json`, `sc
 When a GitHub repository exists, add the repository, manifest, and download URLs to `module.json`, for example:
 
 ```json
-"url": "https://github.com/USERNAME/foundry-cellphone",
-"manifest": "https://raw.githubusercontent.com/USERNAME/foundry-cellphone/main/module.json",
-"download": "https://github.com/USERNAME/foundry-cellphone/releases/download/v1.0.0/foundry-cellphone-v1.0.0.zip"
+"url": "https://github.com/jeremyrobertdavison/foundry-cellphone",
+"manifest": "https://raw.githubusercontent.com/jeremyrobertdavison/foundry-cellphone/main/module.json",
+"download": "https://github.com/jeremyrobertdavison/foundry-cellphone/releases/download/v1.0.0/foundry-cellphone-v1.0.0.zip"
 ```
 
-Do not add placeholder URLs to a published manifest; replace `USERNAME` and confirm the release path first.
+The GitHub URLs above are configured for `jeremyrobertdavison/foundry-cellphone`; confirm the release asset name before publishing.
 
 ## Version 1 scope
 
