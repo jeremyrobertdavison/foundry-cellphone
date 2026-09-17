@@ -1,0 +1,21 @@
+{
+  "id": "foundry-cellphone",
+  "title": "Foundry Cellphone",
+  "description": "An immersive in-game cellphone interface for modern Foundry VTT campaigns. Version 1 includes a persistent party group text and direct player-to-player messages.",
+  "version": "1.0.0",
+  "authors": [
+    {
+      "name": "Jeremy Davison"
+    }
+  ],
+  "compatibility": {
+    "minimum": "12",
+    "verified": "13.350"
+  },
+  "esmodules": [
+    "scripts/foundry-cellphone.js"
+  ],
+  "styles": [
+    "styles/foundry-cellphone.css"
+  ]
+}
