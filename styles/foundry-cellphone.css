@@ -492,3 +492,93 @@
 .fc-contact-unread[hidden] {
   display: none !important;
 }
+
+/* v1.1.0 NPC messaging */
+.fc-section-label {
+  margin: 8px 8px 4px;
+  color: rgba(255,255,255,.42);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.fc-manager-button {
+  width: calc(100% - 8px);
+  min-height: 34px;
+  margin: 4px 4px 8px;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 11px;
+  background: rgba(255,255,255,.055);
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.fc-manager-button:hover {
+  background: rgba(255,255,255,.10);
+}
+
+.fc-contact-name-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fc-contact-kind {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(120,165,255,.16);
+  color: #a9c6ff;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+
+.fc-npc-icon {
+  color: rgba(255,255,255,.48);
+  font-size: 11px;
+}
+
+.fc-manager-note {
+  margin: 5px 6px 10px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.055);
+  color: rgba(255,255,255,.58);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.fc-npc-manager-row {
+  width: 100%;
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: 40px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 13px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.fc-npc-manager-row:hover {
+  background: rgba(255,255,255,.055);
+}
+
+.fc-npc-toggle {
+  width: 17px;
+  height: 17px;
+  margin: 0 3px 0 0;
+  accent-color: #3d7be8;
+  cursor: pointer;
+}

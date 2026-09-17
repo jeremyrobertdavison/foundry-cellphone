@@ -1,17 +1,33 @@
 const MODULE_ID = "foundry-cellphone";
 const PHONE_FLAG = "phoneMessage";
+const NPC_CONTACTS_SETTING = "npcContacts";
 const MAX_RENDERED_MESSAGES = 300;
 
 const state = {
   phoneOpen: false,
   mode: "group",
+  selectedContactType: null,
   selectedContactId: null,
+  actingNpcId: null,
+  npcManagerOpen: false,
   unreadGroup: 0,
   unreadDirect: new Map(),
   root: null,
   launcher: null,
   drag: null
 };
+
+Hooks.once("init", () => {
+  game.settings.register(MODULE_ID, NPC_CONTACTS_SETTING, {
+    name: "NPC Phone Contacts",
+    hint: "Actor IDs that are exposed to players as cellphone contacts.",
+    scope: "world",
+    config: false,
+    type: Array,
+    default: [],
+    onChange: () => refreshAll()
+  });
+});
 
 Hooks.once("ready", () => {
   buildLauncher();
@@ -37,8 +53,10 @@ Hooks.on("createChatMessage", (message) => {
   if (!isPhoneMessage(message)) return;
   if (!isPhoneMessageVisibleToCurrentUser(message)) return;
 
-  const data = getPhoneData(message);
-  if (!data || data.senderId === game.user.id) {
+  const data = normalizePhoneData(message);
+  if (!data) return;
+
+  if (isMessageAuthoredByCurrentUser(data)) {
     refreshAll();
     return;
   }
@@ -46,11 +64,14 @@ Hooks.on("createChatMessage", (message) => {
   if (data.kind === "group") {
     const activelyViewing = state.phoneOpen && state.mode === "group";
     if (!activelyViewing) state.unreadGroup += 1;
-  } else if (data.kind === "dm" && data.recipientId === game.user.id) {
-    const activelyViewing = state.phoneOpen && state.mode === "dm" && state.selectedContactId === data.senderId;
-    if (!activelyViewing) {
-      const current = state.unreadDirect.get(data.senderId) ?? 0;
-      state.unreadDirect.set(data.senderId, current + 1);
+  } else if (data.kind === "dm") {
+    const threadKey = getMessageThreadKeyForCurrentUser(data);
+    if (threadKey) {
+      const activelyViewing = state.phoneOpen && state.mode === "dm" && getCurrentThreadKey() === threadKey;
+      if (!activelyViewing) {
+        const current = state.unreadDirect.get(threadKey) ?? 0;
+        state.unreadDirect.set(threadKey, current + 1);
+      }
     }
   }
 
@@ -146,10 +167,7 @@ function buildPhone() {
     button.addEventListener("click", () => setMode(button.dataset.mode));
   });
 
-  root.querySelector(".fc-back").addEventListener("click", () => {
-    state.selectedContactId = null;
-    renderPhone();
-  });
+  root.querySelector(".fc-back").addEventListener("click", goBack);
 
   const form = root.querySelector(".fc-composer");
   const input = root.querySelector(".fc-message-input");
@@ -193,18 +211,49 @@ function closePhone() {
 }
 
 function setMode(mode) {
-  if (!['group', 'dm'].includes(mode)) return;
+  if (!["group", "dm"].includes(mode)) return;
   state.mode = mode;
-  if (mode === "group") state.selectedContactId = null;
+  state.selectedContactType = null;
+  state.selectedContactId = null;
+  state.actingNpcId = null;
+  state.npcManagerOpen = false;
   markCurrentConversationRead();
   renderPhone();
+}
+
+function goBack() {
+  if (state.npcManagerOpen) {
+    state.npcManagerOpen = false;
+    renderPhone();
+    return;
+  }
+
+  if (state.actingNpcId && state.selectedContactId) {
+    state.selectedContactType = null;
+    state.selectedContactId = null;
+    renderPhone();
+    return;
+  }
+
+  if (state.actingNpcId) {
+    state.actingNpcId = null;
+    renderPhone();
+    return;
+  }
+
+  if (state.selectedContactId) {
+    state.selectedContactType = null;
+    state.selectedContactId = null;
+    renderPhone();
+  }
 }
 
 function markCurrentConversationRead() {
   if (state.mode === "group") {
     state.unreadGroup = 0;
-  } else if (state.selectedContactId) {
-    state.unreadDirect.set(state.selectedContactId, 0);
+  } else {
+    const threadKey = getCurrentThreadKey();
+    if (threadKey) state.unreadDirect.set(threadKey, 0);
   }
   updateBadges();
 }
@@ -215,7 +264,7 @@ async function onSendMessage(event) {
   const body = input.value.trim();
   if (!body) return;
 
-  if (state.mode === "dm" && !state.selectedContactId) {
+  if (state.mode === "dm" && !hasOpenDirectConversation()) {
     ui.notifications.warn("Choose a contact first.");
     return;
   }
@@ -235,32 +284,115 @@ async function onSendMessage(event) {
   }
 }
 
+function hasOpenDirectConversation() {
+  if (state.mode !== "dm") return false;
+  if (game.user.isGM && state.actingNpcId) return Boolean(state.selectedContactId);
+  return Boolean(state.selectedContactType && state.selectedContactId);
+}
+
 async function createPhoneMessage(body) {
-  const senderId = game.user.id;
-  const senderName = getUserDisplayName(game.user);
   const now = Date.now();
-  const flags = {
-    [MODULE_ID]: {
+  let phoneData;
+  let speaker;
+  let whisper = [];
+
+  if (state.mode === "group") {
+    const senderName = getUserDisplayName(game.user);
+    phoneData = {
       [PHONE_FLAG]: true,
-      schema: 1,
-      kind: state.mode,
-      senderId,
+      schema: 2,
+      kind: "group",
+      senderType: "user",
+      senderId: game.user.id,
       senderName,
-      recipientId: state.mode === "dm" ? state.selectedContactId : null,
+      recipientType: null,
+      recipientId: null,
+      recipientName: null,
+      authorUserId: game.user.id,
       body,
       sentAt: now
+    };
+    speaker = { alias: senderName };
+  } else if (game.user.isGM && state.actingNpcId) {
+    const actor = game.actors.get(state.actingNpcId);
+    const recipient = game.users.get(state.selectedContactId);
+    if (!actor || !recipient) throw new Error("NPC or recipient could not be found.");
+
+    phoneData = {
+      [PHONE_FLAG]: true,
+      schema: 2,
+      kind: "dm",
+      senderType: "npc",
+      senderId: actor.id,
+      senderName: actor.name,
+      recipientType: "user",
+      recipientId: recipient.id,
+      recipientName: getUserDisplayName(recipient),
+      authorUserId: game.user.id,
+      body,
+      sentAt: now
+    };
+    speaker = { actor: actor.id, alias: actor.name };
+    whisper = uniqueIds([...getGmUserIds(), recipient.id]);
+  } else {
+    const senderName = getUserDisplayName(game.user);
+    const recipientType = state.selectedContactType;
+    const recipientId = state.selectedContactId;
+
+    if (recipientType === "user") {
+      const recipient = game.users.get(recipientId);
+      if (!recipient) throw new Error("Recipient could not be found.");
+
+      phoneData = {
+        [PHONE_FLAG]: true,
+        schema: 2,
+        kind: "dm",
+        senderType: "user",
+        senderId: game.user.id,
+        senderName,
+        recipientType: "user",
+        recipientId: recipient.id,
+        recipientName: getUserDisplayName(recipient),
+        authorUserId: game.user.id,
+        body,
+        sentAt: now
+      };
+      whisper = uniqueIds([game.user.id, recipient.id]);
+    } else if (recipientType === "npc") {
+      const actor = game.actors.get(recipientId);
+      if (!actor) throw new Error("NPC contact could not be found.");
+
+      phoneData = {
+        [PHONE_FLAG]: true,
+        schema: 2,
+        kind: "dm",
+        senderType: "user",
+        senderId: game.user.id,
+        senderName,
+        recipientType: "npc",
+        recipientId: actor.id,
+        recipientName: actor.name,
+        authorUserId: game.user.id,
+        body,
+        sentAt: now
+      };
+      whisper = uniqueIds([game.user.id, ...getGmUserIds()]);
+    } else {
+      throw new Error("No direct-message recipient is selected.");
     }
-  };
+
+    speaker = { alias: senderName };
+  }
 
   const data = {
     content: formatSafeChatContent(body),
-    speaker: { alias: senderName },
-    flags
+    speaker,
+    flags: {
+      [MODULE_ID]: phoneData
+    }
   };
 
-  if (state.mode === "dm") {
-    data.whisper = [senderId, state.selectedContactId];
-  }
+  if (phoneData.kind === "dm") data.whisper = whisper;
 
   const ChatMessageClass = foundry?.documents?.ChatMessage ?? globalThis.ChatMessage;
   if (!ChatMessageClass?.create) throw new Error("Foundry ChatMessage API is unavailable.");
@@ -283,7 +415,7 @@ function renderPhone() {
   const contactsView = state.root.querySelector(".fc-contacts-view");
   const composer = state.root.querySelector(".fc-composer");
 
-  if (state.mode === "dm" && !state.selectedContactId) {
+  if (state.mode === "dm" && !hasOpenDirectConversation()) {
     conversation.hidden = true;
     contactsView.hidden = false;
     composer.hidden = true;
@@ -295,6 +427,7 @@ function renderPhone() {
     renderMessages();
   }
 
+  markCurrentConversationRead();
   updateBadges();
 }
 
@@ -317,9 +450,32 @@ function updateHeader() {
 
   if (state.mode === "group") {
     title.textContent = "Party Chat";
-    const online = getContacts().filter((u) => u.active).length + (game.user.active ? 1 : 0);
+    const online = game.users.contents.filter((u) => u.active).length;
     subtitle.textContent = `${online} online`;
     back.hidden = true;
+    return;
+  }
+
+  if (state.npcManagerOpen) {
+    title.textContent = "NPC Contacts";
+    subtitle.textContent = "Choose who players can text";
+    back.hidden = false;
+    return;
+  }
+
+  if (game.user.isGM && state.actingNpcId) {
+    const actor = game.actors.get(state.actingNpcId);
+    if (!state.selectedContactId) {
+      title.textContent = actor?.name || "NPC";
+      subtitle.textContent = "Choose a player";
+      back.hidden = false;
+      return;
+    }
+
+    const contact = game.users.get(state.selectedContactId);
+    title.textContent = contact ? getUserDisplayName(contact) : "Direct Message";
+    subtitle.textContent = `Texting as ${actor?.name || "NPC"}`;
+    back.hidden = false;
     return;
   }
 
@@ -327,6 +483,14 @@ function updateHeader() {
     title.textContent = "Direct Messages";
     subtitle.textContent = "Choose a contact";
     back.hidden = true;
+    return;
+  }
+
+  if (state.selectedContactType === "npc") {
+    const actor = game.actors.get(state.selectedContactId);
+    title.textContent = actor?.name || "NPC";
+    subtitle.textContent = "NPC Contact";
+    back.hidden = false;
     return;
   }
 
@@ -362,8 +526,8 @@ function renderMessages() {
 }
 
 function buildMessageBubble(message) {
-  const data = getPhoneData(message);
-  const outgoing = data.senderId === game.user.id;
+  const data = normalizePhoneData(message);
+  const outgoing = isOutgoingForCurrentView(data);
   const row = document.createElement("div");
   row.className = `fc-message-row ${outgoing ? "is-outgoing" : "is-incoming"}`;
 
@@ -391,70 +555,244 @@ function buildMessageBubble(message) {
   return row;
 }
 
+function isOutgoingForCurrentView(data) {
+  if (!data) return false;
+  if (state.mode === "group") return data.senderType === "user" && data.senderId === game.user.id;
+  if (game.user.isGM && state.actingNpcId) return data.senderType === "npc" && data.senderId === state.actingNpcId;
+  return data.senderType === "user" && data.senderId === game.user.id;
+}
+
 function renderContacts() {
   const container = state.root.querySelector(".fc-contacts");
   container.replaceChildren();
 
-  const contacts = getContacts();
-  if (!contacts.length) {
+  if (state.npcManagerOpen) {
+    renderNpcManager(container);
+    return;
+  }
+
+  if (game.user.isGM && state.actingNpcId) {
+    renderNpcRecipients(container, state.actingNpcId);
+    return;
+  }
+
+  if (game.user.isGM) {
+    const manage = document.createElement("button");
+    manage.className = "fc-manager-button";
+    manage.type = "button";
+    manage.innerHTML = `<i class="fa-solid fa-address-card"></i><span>Manage NPC Contacts</span>`;
+    manage.addEventListener("click", () => {
+      state.npcManagerOpen = true;
+      renderPhone();
+    });
+    container.appendChild(manage);
+  }
+
+  const userContacts = getUserContacts();
+  if (userContacts.length) {
+    appendSectionLabel(container, "People");
+    for (const user of userContacts) container.appendChild(buildUserContactRow(user));
+  }
+
+  const npcContacts = getNpcContacts();
+  if (npcContacts.length) {
+    appendSectionLabel(container, "NPC Contacts");
+    for (const actor of npcContacts) container.appendChild(buildNpcContactRow(actor));
+  }
+
+  if (!userContacts.length && !npcContacts.length) {
     const empty = document.createElement("div");
     empty.className = "fc-empty";
-    empty.innerHTML = `<i class="fa-solid fa-address-book"></i><strong>No contacts</strong><span>No other Foundry users are available.</span>`;
+    empty.innerHTML = `<i class="fa-solid fa-address-book"></i><strong>No contacts</strong><span>No cellphone contacts are available.</span>`;
+    container.appendChild(empty);
+  }
+}
+
+function appendSectionLabel(container, text) {
+  const label = document.createElement("div");
+  label.className = "fc-section-label";
+  label.textContent = text;
+  container.appendChild(label);
+}
+
+function buildUserContactRow(user) {
+  const latest = getDirectMessagesWithUser(user.id).at(-1);
+  let previewText = user.active ? "Online" : "Offline";
+  if (latest) {
+    const data = normalizePhoneData(latest);
+    const prefix = data.senderType === "user" && data.senderId === game.user.id ? "You: " : "";
+    previewText = prefix + truncate(data.body || "", 42);
+  }
+
+  const unread = state.unreadDirect.get(`user:${user.id}`) ?? 0;
+  const row = buildContactRow({
+    name: getUserDisplayName(user),
+    avatar: getUserAvatar(user),
+    preview: previewText,
+    online: user.active,
+    unread,
+    kindLabel: null
+  });
+
+  row.addEventListener("click", () => {
+    state.selectedContactType = "user";
+    state.selectedContactId = user.id;
+    state.unreadDirect.set(`user:${user.id}`, 0);
+    renderPhone();
+    requestAnimationFrame(() => state.root.querySelector(".fc-message-input")?.focus());
+  });
+
+  return row;
+}
+
+function buildNpcContactRow(actor) {
+  let previewText = game.user.isGM ? "Choose a player to text" : "NPC contact";
+  let unread = 0;
+
+  if (game.user.isGM) {
+    const latest = getAllNpcMessagesForActor(actor.id).at(-1);
+    if (latest) {
+      const data = normalizePhoneData(latest);
+      const playerId = data.senderType === "user" ? data.senderId : data.recipientId;
+      const player = game.users.get(playerId);
+      const prefix = data.senderType === "npc" ? `${actor.name}: ` : `${getUserDisplayName(player)}: `;
+      previewText = prefix + truncate(data.body || "", 34);
+    }
+    unread = getNpcUnreadForGm(actor.id);
+  } else {
+    const latest = getNpcMessages(actor.id, game.user.id).at(-1);
+    if (latest) {
+      const data = normalizePhoneData(latest);
+      const prefix = data.senderType === "user" ? "You: " : "";
+      previewText = prefix + truncate(data.body || "", 42);
+    }
+    unread = state.unreadDirect.get(`npc:${actor.id}`) ?? 0;
+  }
+
+  const row = buildContactRow({
+    name: actor.name,
+    avatar: getActorAvatar(actor),
+    preview: previewText,
+    online: null,
+    unread,
+    kindLabel: "NPC"
+  });
+
+  row.addEventListener("click", () => {
+    if (game.user.isGM) {
+      state.actingNpcId = actor.id;
+      state.selectedContactType = null;
+      state.selectedContactId = null;
+    } else {
+      state.selectedContactType = "npc";
+      state.selectedContactId = actor.id;
+      state.unreadDirect.set(`npc:${actor.id}`, 0);
+    }
+    renderPhone();
+    requestAnimationFrame(() => state.root.querySelector(".fc-message-input")?.focus());
+  });
+
+  return row;
+}
+
+function buildContactRow({ name, avatar, preview, online, unread, kindLabel }) {
+  const row = document.createElement("button");
+  row.className = "fc-contact";
+  row.type = "button";
+
+  const img = document.createElement("img");
+  img.className = "fc-contact-avatar";
+  img.src = avatar;
+  img.alt = "";
+
+  const text = document.createElement("div");
+  text.className = "fc-contact-text";
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "fc-contact-name-row";
+
+  const nameEl = document.createElement("div");
+  nameEl.className = "fc-contact-name";
+  nameEl.textContent = name;
+  nameRow.appendChild(nameEl);
+
+  if (kindLabel) {
+    const kind = document.createElement("span");
+    kind.className = "fc-contact-kind";
+    kind.textContent = kindLabel;
+    nameRow.appendChild(kind);
+  }
+
+  const previewEl = document.createElement("div");
+  previewEl.className = "fc-contact-preview";
+  previewEl.textContent = preview;
+
+  text.append(nameRow, previewEl);
+
+  const right = document.createElement("div");
+  right.className = "fc-contact-right";
+
+  if (online !== null) {
+    const dot = document.createElement("span");
+    dot.className = `fc-presence ${online ? "is-online" : ""}`;
+    dot.title = online ? "Online" : "Offline";
+    right.appendChild(dot);
+  } else {
+    const npcIcon = document.createElement("i");
+    npcIcon.className = "fa-solid fa-user-secret fc-npc-icon";
+    npcIcon.title = "NPC Contact";
+    right.appendChild(npcIcon);
+  }
+
+  if (unread > 0) {
+    const badge = document.createElement("span");
+    badge.className = "fc-contact-unread";
+    badge.textContent = unread > 99 ? "99+" : String(unread);
+    right.appendChild(badge);
+  }
+
+  row.append(img, text, right);
+  return row;
+}
+
+function renderNpcRecipients(container, actorId) {
+  const actor = game.actors.get(actorId);
+  const players = getNpcRecipientUsers();
+
+  if (!players.length) {
+    const empty = document.createElement("div");
+    empty.className = "fc-empty";
+    empty.innerHTML = `<i class="fa-solid fa-user-group"></i><strong>No players</strong><span>No non-GM users are available.</span>`;
     container.appendChild(empty);
     return;
   }
 
-  for (const user of contacts) {
-    const row = document.createElement("button");
-    row.className = "fc-contact";
-    row.type = "button";
-    row.dataset.userId = user.id;
-
-    const avatar = document.createElement("img");
-    avatar.className = "fc-contact-avatar";
-    avatar.src = getUserAvatar(user);
-    avatar.alt = "";
-
-    const text = document.createElement("div");
-    text.className = "fc-contact-text";
-
-    const name = document.createElement("div");
-    name.className = "fc-contact-name";
-    name.textContent = getUserDisplayName(user);
-
-    const preview = document.createElement("div");
-    preview.className = "fc-contact-preview";
-    const latest = getDirectMessagesWith(user.id).at(-1);
+  appendSectionLabel(container, `Text as ${actor?.name || "NPC"}`);
+  for (const user of players) {
+    const messages = getNpcMessages(actorId, user.id);
+    const latest = messages.at(-1);
+    let previewText = user.active ? "Online" : "Offline";
     if (latest) {
-      const latestData = getPhoneData(latest);
-      const prefix = latestData.senderId === game.user.id ? "You: " : "";
-      preview.textContent = prefix + truncate(latestData.body || "", 42);
-    } else {
-      preview.textContent = user.active ? "Online" : "Offline";
+      const data = normalizePhoneData(latest);
+      const prefix = data.senderType === "npc" ? `You as ${actor?.name || "NPC"}: ` : "";
+      previewText = prefix + truncate(data.body || "", 34);
     }
 
-    text.append(name, preview);
+    const key = `npc:${actorId}:user:${user.id}`;
+    const unread = state.unreadDirect.get(key) ?? 0;
+    const row = buildContactRow({
+      name: getUserDisplayName(user),
+      avatar: getUserAvatar(user),
+      preview: previewText,
+      online: user.active,
+      unread,
+      kindLabel: null
+    });
 
-    const right = document.createElement("div");
-    right.className = "fc-contact-right";
-
-    const dot = document.createElement("span");
-    dot.className = `fc-presence ${user.active ? "is-online" : ""}`;
-    dot.title = user.active ? "Online" : "Offline";
-    right.appendChild(dot);
-
-    const unread = state.unreadDirect.get(user.id) ?? 0;
-    if (unread > 0) {
-      const badge = document.createElement("span");
-      badge.className = "fc-contact-unread";
-      badge.textContent = unread > 99 ? "99+" : String(unread);
-      right.appendChild(badge);
-    }
-
-    row.append(avatar, text, right);
     row.addEventListener("click", () => {
+      state.selectedContactType = "user";
       state.selectedContactId = user.id;
-      state.unreadDirect.set(user.id, 0);
+      state.unreadDirect.set(key, 0);
       renderPhone();
       requestAnimationFrame(() => state.root.querySelector(".fc-message-input")?.focus());
     });
@@ -463,21 +801,119 @@ function renderContacts() {
   }
 }
 
-function getConversationMessages() {
-  if (state.mode === "group") {
-    return getAllPhoneMessages().filter((message) => getPhoneData(message).kind === "group");
+function renderNpcManager(container) {
+  if (!game.user.isGM) return;
+
+  const enabledIds = new Set(getNpcContactIds());
+  const actors = getNpcCandidates();
+
+  if (!actors.length) {
+    const empty = document.createElement("div");
+    empty.className = "fc-empty";
+    empty.innerHTML = `<i class="fa-solid fa-masks-theater"></i><strong>No NPC actors</strong><span>Create an Actor that is not assigned to a Foundry user.</span>`;
+    container.appendChild(empty);
+    return;
   }
-  return getDirectMessagesWith(state.selectedContactId);
+
+  const note = document.createElement("div");
+  note.className = "fc-manager-note";
+  note.textContent = "Enabled NPCs appear in every player's Direct Messages contact list.";
+  container.appendChild(note);
+
+  for (const actor of actors) {
+    const row = document.createElement("label");
+    row.className = "fc-npc-manager-row";
+
+    const avatar = document.createElement("img");
+    avatar.className = "fc-contact-avatar";
+    avatar.src = getActorAvatar(actor);
+    avatar.alt = "";
+
+    const text = document.createElement("div");
+    text.className = "fc-contact-text";
+
+    const name = document.createElement("div");
+    name.className = "fc-contact-name";
+    name.textContent = actor.name;
+
+    const preview = document.createElement("div");
+    preview.className = "fc-contact-preview";
+    preview.textContent = enabledIds.has(actor.id) ? "Available to players" : "Hidden from players";
+    text.append(name, preview);
+
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.className = "fc-npc-toggle";
+    toggle.checked = enabledIds.has(actor.id);
+    toggle.addEventListener("change", async () => {
+      toggle.disabled = true;
+      try {
+        const current = new Set(getNpcContactIds());
+        if (toggle.checked) current.add(actor.id);
+        else current.delete(actor.id);
+        await game.settings.set(MODULE_ID, NPC_CONTACTS_SETTING, [...current]);
+        renderPhone();
+      } catch (error) {
+        console.error(`${MODULE_ID} | Failed to update NPC contacts`, error);
+        ui.notifications.error("NPC contacts could not be updated.");
+      } finally {
+        toggle.disabled = false;
+      }
+    });
+
+    row.append(avatar, text, toggle);
+    container.appendChild(row);
+  }
 }
 
-function getDirectMessagesWith(contactId) {
+function getConversationMessages() {
+  if (state.mode === "group") {
+    return getAllPhoneMessages().filter((message) => normalizePhoneData(message).kind === "group");
+  }
+
+  if (game.user.isGM && state.actingNpcId && state.selectedContactId) {
+    return getNpcMessages(state.actingNpcId, state.selectedContactId);
+  }
+
+  if (state.selectedContactType === "npc") {
+    return getNpcMessages(state.selectedContactId, game.user.id);
+  }
+
+  if (state.selectedContactType === "user") {
+    return getDirectMessagesWithUser(state.selectedContactId);
+  }
+
+  return [];
+}
+
+function getDirectMessagesWithUser(contactId) {
   if (!contactId) return [];
   const myId = game.user.id;
   return getAllPhoneMessages().filter((message) => {
-    const data = getPhoneData(message);
+    const data = normalizePhoneData(message);
     if (data.kind !== "dm") return false;
+    if (data.senderType !== "user" || data.recipientType !== "user") return false;
     return (data.senderId === myId && data.recipientId === contactId) ||
       (data.senderId === contactId && data.recipientId === myId);
+  });
+}
+
+function getNpcMessages(actorId, userId) {
+  if (!actorId || !userId) return [];
+  return getAllPhoneMessages().filter((message) => {
+    const data = normalizePhoneData(message);
+    if (data.kind !== "dm") return false;
+    return (data.senderType === "user" && data.senderId === userId && data.recipientType === "npc" && data.recipientId === actorId) ||
+      (data.senderType === "npc" && data.senderId === actorId && data.recipientType === "user" && data.recipientId === userId);
+  });
+}
+
+function getAllNpcMessagesForActor(actorId) {
+  return getAllPhoneMessages().filter((message) => {
+    const data = normalizePhoneData(message);
+    if (data.kind !== "dm") return false;
+    return (data.senderType === "npc" && data.senderId === actorId) ||
+      (data.recipientType === "npc" && data.recipientId === actorId);
   });
 }
 
@@ -495,25 +931,132 @@ function getPhoneData(message) {
   return message?.flags?.[MODULE_ID] ?? null;
 }
 
-function isPhoneMessageVisibleToCurrentUser(message) {
+function normalizePhoneData(message) {
   const data = getPhoneData(message);
+  if (!data) return null;
+
+  return {
+    ...data,
+    senderType: data.senderType || "user",
+    recipientType: data.kind === "dm" ? (data.recipientType || "user") : null,
+    authorUserId: data.authorUserId || (data.senderType === "npc" ? null : data.senderId)
+  };
+}
+
+function isPhoneMessageVisibleToCurrentUser(message) {
+  const data = normalizePhoneData(message);
   if (!data) return false;
   if (data.kind === "group") return true;
   if (data.kind !== "dm") return false;
-  return data.senderId === game.user.id || data.recipientId === game.user.id;
+
+  if (data.senderType === "user" && data.recipientType === "user") {
+    return data.senderId === game.user.id || data.recipientId === game.user.id;
+  }
+
+  if (data.senderType === "user" && data.recipientType === "npc") {
+    return data.senderId === game.user.id || game.user.isGM;
+  }
+
+  if (data.senderType === "npc" && data.recipientType === "user") {
+    return data.recipientId === game.user.id || game.user.isGM;
+  }
+
+  return false;
+}
+
+function isMessageAuthoredByCurrentUser(data) {
+  if (!data) return false;
+  if (data.authorUserId) return data.authorUserId === game.user.id;
+  return data.senderType === "user" && data.senderId === game.user.id;
+}
+
+function getMessageThreadKeyForCurrentUser(data) {
+  if (!data || data.kind !== "dm") return null;
+
+  if (data.senderType === "user" && data.recipientType === "user") {
+    if (data.senderId === game.user.id) return `user:${data.recipientId}`;
+    if (data.recipientId === game.user.id) return `user:${data.senderId}`;
+    return null;
+  }
+
+  if (data.senderType === "user" && data.recipientType === "npc") {
+    if (game.user.isGM) return `npc:${data.recipientId}:user:${data.senderId}`;
+    if (data.senderId === game.user.id) return `npc:${data.recipientId}`;
+    return null;
+  }
+
+  if (data.senderType === "npc" && data.recipientType === "user") {
+    if (game.user.isGM) return `npc:${data.senderId}:user:${data.recipientId}`;
+    if (data.recipientId === game.user.id) return `npc:${data.senderId}`;
+    return null;
+  }
+
+  return null;
+}
+
+function getCurrentThreadKey() {
+  if (state.mode !== "dm") return null;
+  if (game.user.isGM && state.actingNpcId && state.selectedContactId) {
+    return `npc:${state.actingNpcId}:user:${state.selectedContactId}`;
+  }
+  if (state.selectedContactType === "npc" && state.selectedContactId) {
+    return `npc:${state.selectedContactId}`;
+  }
+  if (state.selectedContactType === "user" && state.selectedContactId) {
+    return `user:${state.selectedContactId}`;
+  }
+  return null;
 }
 
 function getMessageTimestamp(message) {
-  return Number(getPhoneData(message)?.sentAt ?? message.timestamp ?? 0);
+  return Number(normalizePhoneData(message)?.sentAt ?? message.timestamp ?? 0);
 }
 
-function getContacts() {
+function getUserContacts() {
   return game.users.contents
     .filter((user) => user.id !== game.user.id)
     .sort((a, b) => {
       if (a.active !== b.active) return a.active ? -1 : 1;
       return getUserDisplayName(a).localeCompare(getUserDisplayName(b));
     });
+}
+
+function getNpcRecipientUsers() {
+  return game.users.contents
+    .filter((user) => !user.isGM)
+    .sort((a, b) => {
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      return getUserDisplayName(a).localeCompare(getUserDisplayName(b));
+    });
+}
+
+function getNpcContactIds() {
+  const value = game.settings.get(MODULE_ID, NPC_CONTACTS_SETTING);
+  return Array.isArray(value) ? value : [];
+}
+
+function getNpcContacts() {
+  const ids = getNpcContactIds();
+  return ids
+    .map((id) => game.actors.get(id))
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getNpcCandidates() {
+  const assignedActorIds = new Set(game.users.contents.map((user) => user.character?.id).filter(Boolean));
+  return game.actors.contents
+    .filter((actor) => !assignedActorIds.has(actor.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getNpcUnreadForGm(actorId) {
+  let total = 0;
+  const prefix = `npc:${actorId}:user:`;
+  for (const [key, count] of state.unreadDirect.entries()) {
+    if (key.startsWith(prefix)) total += count;
+  }
+  return total;
 }
 
 function getUserDisplayName(user) {
@@ -523,6 +1066,18 @@ function getUserDisplayName(user) {
 
 function getUserAvatar(user) {
   return user?.character?.img || user?.avatar || "icons/svg/mystery-man.svg";
+}
+
+function getActorAvatar(actor) {
+  return actor?.img || "icons/svg/mystery-man.svg";
+}
+
+function getGmUserIds() {
+  return game.users.contents.filter((user) => user.isGM).map((user) => user.id);
+}
+
+function uniqueIds(ids) {
+  return [...new Set(ids.filter(Boolean))];
 }
 
 function updateBadges() {

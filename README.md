@@ -2,7 +2,7 @@
 
 An immersive cellphone UI for modern-day Foundry VTT campaigns.
 
-Version 1.0.0 provides the messaging foundation: a party-wide group text and player-to-player direct messages rendered inside a cellphone frame rather than the normal Foundry chat interface.
+Version 1.1.0 expands the messaging system with NPC texting. Players can message NPC contacts exposed by the GM, and GMs can reply from the perspective of those NPCs.
 
 ## Features
 
@@ -11,68 +11,70 @@ Version 1.0.0 provides the messaging foundation: a party-wide group text and pla
 - Custom transparent PNG phone frame
 - Persistent **Party Chat** shared by the table
 - Persistent **Direct Messages** between Foundry users
-- Uses an assigned character's name and portrait when available, falling back to the Foundry user name/avatar
-- Online/offline contact indicators
-- Unread badges for group and direct messages
+- GM-managed **NPC Contacts**
+- Players can privately text enabled NPC contacts
+- GMs can select an NPC and text a player **as that NPC**
+- NPC conversations remain separate per NPC and per player
+- Assigned character names/portraits are used for Foundry users when available
+- Actor names/portraits are used for NPC contacts
+- Online/offline indicators for player contacts
+- Unread badges for group, player, and NPC conversations
 - Enter to send; Shift+Enter for a new line
 - Phone messages are hidden from the normal Foundry chat feed
-- Works independently of game system data, so it can be used with modern RPG systems including Marvel Multiverse RPG
+- Existing v1.0.0 message history remains readable
 
 ## Foundry compatibility
 
 - Minimum: Foundry VTT v12
 - Verified target: Foundry VTT v13.350
 
-The module uses Foundry `ChatMessage` documents as the persistence layer. Group texts are stored as normal chat documents with module flags; direct messages use Foundry whisper recipients. The module suppresses its flagged messages from the regular chat log and displays them only in the cellphone UI.
+## Setting up NPC contacts
 
-## Important privacy note
+1. Sign in as a GM and open the cellphone.
+2. Open **Direct**.
+3. Click **Manage NPC Contacts**.
+4. Enable any Actor that should appear as a cellphone contact for players.
+5. Players will see those Actors under **NPC Contacts** in their Direct Messages list.
 
-Direct Messages are **in-game roleplay DMs**, not encrypted private communications. They use Foundry's whisper/message infrastructure and should not be treated as secret from the Foundry server owner or as a secure messaging system.
+Actors assigned directly to Foundry users are excluded from the NPC-management list so player characters are not duplicated as NPC contacts.
 
-## Installation for development
+## Player to NPC messaging
 
-Copy the `foundry-cellphone` folder into:
+A player opens **Direct**, chooses an enabled NPC, and sends a message normally. The message is whispered through Foundry to the sending player and GM users. Other players do not receive that NPC conversation.
+
+## GM texting as an NPC
+
+A GM opens **Direct**, chooses an enabled NPC, then chooses a player. The conversation opens with a header showing **Texting as [NPC Name]**. Messages sent from that view appear to the player as messages from the selected NPC.
+
+## Privacy note
+
+Cellphone direct messages are in-game roleplaying messages, not encrypted private communications. NPC messages are intentionally available to GM users so the GM can roleplay the NPC response. Player-to-player DMs continue to use Foundry whisper recipients and are not automatically copied to the GM.
+
+## GitHub installation
+
+Manifest URL:
 
 ```text
-<Data>/modules/foundry-cellphone
+https://raw.githubusercontent.com/jeremyrobertdavison/foundry-cellphone/main/module.json
 ```
 
-Restart Foundry if needed, then enable **Foundry Cellphone** in the world's Manage Modules screen.
+Repository:
 
-## GitHub release packaging
-
-For a Foundry release asset, create a ZIP whose root contains `module.json`, `scripts/`, `styles/`, and `assets/` directly. The included `foundry-cellphone-v1.0.0.zip` is packaged that way.
-
-When a GitHub repository exists, add the repository, manifest, and download URLs to `module.json`, for example:
-
-```json
-"url": "https://github.com/jeremyrobertdavison/foundry-cellphone",
-"manifest": "https://raw.githubusercontent.com/jeremyrobertdavison/foundry-cellphone/main/module.json",
-"download": "https://github.com/jeremyrobertdavison/foundry-cellphone/releases/download/v1.0.0/foundry-cellphone-v1.0.0.zip"
+```text
+https://github.com/jeremyrobertdavison/foundry-cellphone
 ```
 
-The GitHub URLs above are configured for `jeremyrobertdavison/foundry-cellphone`; confirm the release asset name before publishing.
+## Release packaging
 
-## Version 1 scope
+The release archive must contain `module.json` at the root of the ZIP:
 
-This first release intentionally focuses on the messaging core. Good candidates for later releases include:
-
-- GM-controlled NPC contacts
-- Multiple group chats
-- Lock-screen notifications
-- Notification sounds and ringtones
-- Images and attachments
-- Phone wallpapers and themes
-- Calls / voicemail
-- Scheduled GM messages
-- Fake websites and browser app
-- Maps / location sharing
-- Contact management and phone-number exchange
-
-## Data behavior
-
-Messages persist with the world's normal ChatMessage collection. Clearing the Foundry chat history can therefore also remove cellphone history.
-
-## License
-
-MIT
+```text
+foundry-cellphone-v1.1.0.zip
+├── module.json
+├── README.md
+├── CHANGELOG.md
+├── LICENSE
+├── assets/
+├── scripts/
+└── styles/
+```
