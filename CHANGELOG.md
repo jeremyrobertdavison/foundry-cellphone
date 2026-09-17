@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.1
+
+- Added live typing indicators for player DMs, NPC DMs, Party Chat, and custom group chats.
+- Added multiple persistent group-chat threads while preserving the original Party Chat.
+- Added a New Group flow that lets the creator choose multiple player contacts, NPC contacts, or a mixture of both.
+- Added optional group names and per-group unread badges.
+- Added private group delivery through Foundry whisper recipients.
+- Groups containing NPCs are also delivered to GM users so NPCs can participate naturally.
+- Added GM sender identity selection for groups containing multiple NPCs.
+- Typing indicators use the active roleplay identity, so players can see an NPC such as Nick Fury typing rather than the GM account.
+- Maintained compatibility with existing v1.0.0 and v1.1.0 message history.
+
 ## 1.1.0
 
 - Added GM-managed NPC cellphone contacts.

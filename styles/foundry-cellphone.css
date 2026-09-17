@@ -582,3 +582,120 @@
   accent-color: #3d7be8;
   cursor: pointer;
 }
+
+/* v1.1.1 group chats and typing indicators */
+.fc-composer {
+  display: block;
+  padding: 6px 10px 12px;
+}
+
+.fc-composer-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 34px;
+  align-items: end;
+  gap: 6px;
+}
+
+.fc-sender-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 2px 5px;
+  color: rgba(255,255,255,.48);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.fc-sender-row[hidden],
+.fc-typing-indicator[hidden] {
+  display: none !important;
+}
+
+.fc-sender-select {
+  min-width: 0;
+  flex: 1;
+  height: 25px;
+  padding: 2px 7px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 8px;
+  outline: none;
+  background: rgba(255,255,255,.075);
+  color: #fff;
+  font: inherit;
+  font-size: 9px;
+}
+
+.fc-sender-select option {
+  background: #171d27;
+  color: #fff;
+}
+
+.fc-typing-indicator {
+  min-height: 15px;
+  margin: 0 5px 3px;
+  color: rgba(255,255,255,.52);
+  font-size: 9px;
+  font-style: italic;
+  line-height: 1.2;
+}
+
+.fc-group-avatar {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(61,123,232,.36), rgba(117,76,214,.28));
+  color: #d7e5ff;
+  font-size: 15px;
+}
+
+.fc-group-name-input {
+  width: calc(100% - 8px);
+  height: 34px;
+  margin: 2px 4px 7px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 11px;
+  outline: none;
+  background: rgba(255,255,255,.065);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  user-select: text;
+}
+
+.fc-group-name-input:focus {
+  border-color: rgba(120,165,255,.58);
+  box-shadow: 0 0 0 2px rgba(74,124,226,.13);
+}
+
+.fc-group-name-input::placeholder {
+  color: rgba(255,255,255,.36);
+}
+
+.fc-create-group-button {
+  width: calc(100% - 8px);
+  min-height: 36px;
+  margin: 10px 4px 4px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 11px;
+  background: #3d7be8;
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.fc-create-group-button:hover {
+  background: #4b88f5;
+}
+
+.fc-group-choice {
+  user-select: none;
+}
