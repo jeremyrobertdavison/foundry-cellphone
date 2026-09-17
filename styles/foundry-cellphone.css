@@ -844,3 +844,93 @@
   filter: brightness(1.12);
   transform: translateY(-1px);
 }
+
+
+/* v1.1.4 GM call-as-NPC picker */
+.fc-gm-call-button {
+  border-color: rgba(44, 190, 103, .20);
+  background: rgba(44, 190, 103, .09);
+  color: #a7f3c2;
+}
+
+.fc-gm-call-button:hover {
+  background: rgba(44, 190, 103, .16);
+}
+
+.fc-gm-call-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 5px 10px;
+}
+
+.fc-gm-call-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: rgba(255,255,255,.58);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.fc-gm-call-select {
+  width: 100%;
+  height: 34px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 10px;
+  outline: none;
+  background: rgba(255,255,255,.07);
+  color: #fff;
+  font: inherit;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.fc-gm-call-select:focus {
+  border-color: rgba(120,165,255,.58);
+  box-shadow: 0 0 0 2px rgba(74,124,226,.13);
+}
+
+.fc-gm-call-select option {
+  background: #171d27;
+  color: #fff;
+}
+
+.fc-gm-call-preview {
+  min-height: 60px;
+  display: grid;
+  grid-template-columns: 44px minmax(0,1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 9px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  background: rgba(255,255,255,.045);
+}
+
+.fc-gm-call-preview-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255,255,255,.08);
+}
+
+.fc-place-npc-call {
+  margin: 2px 0 0;
+  width: 100%;
+  background: #2f9e5d;
+}
+
+.fc-place-npc-call:hover {
+  background: #38ae6a;
+}
+
+.fc-place-npc-call:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}

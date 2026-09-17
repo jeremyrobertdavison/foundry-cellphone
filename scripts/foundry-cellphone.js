@@ -20,6 +20,9 @@ const state = {
   selectedContactId: null,
   actingNpcId: null,
   npcManagerOpen: false,
+  gmNpcCallOpen: false,
+  gmNpcCallActorId: null,
+  gmNpcCallUserId: null,
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -300,6 +303,9 @@ function setMode(mode) {
   state.selectedContactId = null;
   state.actingNpcId = null;
   state.npcManagerOpen = false;
+  state.gmNpcCallOpen = false;
+  state.gmNpcCallActorId = null;
+  state.gmNpcCallUserId = null;
   renderPhone();
 }
 
@@ -319,6 +325,14 @@ function goBack() {
       renderPhone();
       return;
     }
+  }
+
+  if (state.gmNpcCallOpen) {
+    state.gmNpcCallOpen = false;
+    state.gmNpcCallActorId = null;
+    state.gmNpcCallUserId = null;
+    renderPhone();
+    return;
   }
 
   if (state.npcManagerOpen) {
@@ -714,6 +728,13 @@ function updateHeader() {
     return;
   }
 
+  if (state.gmNpcCallOpen) {
+    title.textContent = "Call as NPC";
+    subtitle.textContent = "Choose a caller and player";
+    back.hidden = false;
+    return;
+  }
+
   if (state.npcManagerOpen) {
     title.textContent = "NPC Contacts";
     subtitle.textContent = "Choose who players can text";
@@ -997,6 +1018,11 @@ function resetGroupDraft() {
 }
 
 function renderDirectContacts(container) {
+  if (state.gmNpcCallOpen) {
+    renderGmNpcCaller(container);
+    return;
+  }
+
   if (state.npcManagerOpen) {
     renderNpcManager(container);
     return;
@@ -1008,6 +1034,18 @@ function renderDirectContacts(container) {
   }
 
   if (game.user.isGM) {
+    const callAsNpc = document.createElement("button");
+    callAsNpc.className = "fc-manager-button fc-gm-call-button";
+    callAsNpc.type = "button";
+    callAsNpc.innerHTML = `<i class="fa-solid fa-phone-volume"></i><span>Call Player as NPC</span>`;
+    callAsNpc.addEventListener("click", () => {
+      state.gmNpcCallOpen = true;
+      state.gmNpcCallActorId = null;
+      state.gmNpcCallUserId = null;
+      renderPhone();
+    });
+    container.appendChild(callAsNpc);
+
     const manage = document.createElement("button");
     manage.className = "fc-manager-button";
     manage.type = "button";
@@ -1231,6 +1269,122 @@ function renderNpcRecipients(container, actorId) {
 
     container.appendChild(row);
   }
+}
+
+function renderGmNpcCaller(container) {
+  if (!game.user.isGM) return;
+
+  const actors = getNpcCandidates();
+  const players = getNpcRecipientUsers();
+
+  const note = document.createElement("div");
+  note.className = "fc-manager-note";
+  note.textContent = "Place a roleplay call as any NPC Actor. The NPC does not need to be enabled as a messaging contact.";
+  container.appendChild(note);
+
+  if (!actors.length || !players.length) {
+    const empty = document.createElement("div");
+    empty.className = "fc-empty";
+    const reason = !actors.length ? "No NPC Actors are available." : "No player users are available.";
+    empty.innerHTML = `<i class="fa-solid fa-phone-slash"></i><strong>Call unavailable</strong><span>${reason}</span>`;
+    container.appendChild(empty);
+    return;
+  }
+
+  if (!state.gmNpcCallActorId || !actors.some((actor) => actor.id === state.gmNpcCallActorId)) {
+    state.gmNpcCallActorId = actors[0].id;
+  }
+  if (!state.gmNpcCallUserId || !players.some((user) => user.id === state.gmNpcCallUserId)) {
+    state.gmNpcCallUserId = players.find((user) => user.active)?.id || players[0].id;
+  }
+
+  const form = document.createElement("div");
+  form.className = "fc-gm-call-form";
+
+  const actorField = document.createElement("label");
+  actorField.className = "fc-gm-call-field";
+  const actorLabel = document.createElement("span");
+  actorLabel.textContent = "Call as";
+  const actorSelect = document.createElement("select");
+  actorSelect.className = "fc-gm-call-select";
+  actorSelect.setAttribute("aria-label", "NPC caller");
+  for (const actor of actors) {
+    const option = document.createElement("option");
+    option.value = actor.id;
+    option.textContent = actor.name;
+    option.selected = actor.id === state.gmNpcCallActorId;
+    actorSelect.appendChild(option);
+  }
+  actorField.append(actorLabel, actorSelect);
+
+  const playerField = document.createElement("label");
+  playerField.className = "fc-gm-call-field";
+  const playerLabel = document.createElement("span");
+  playerLabel.textContent = "Call player";
+  const playerSelect = document.createElement("select");
+  playerSelect.className = "fc-gm-call-select";
+  playerSelect.setAttribute("aria-label", "Player to call");
+  for (const user of players) {
+    const option = document.createElement("option");
+    option.value = user.id;
+    option.textContent = `${getUserDisplayName(user)}${user.active ? "" : " (Offline)"}`;
+    option.selected = user.id === state.gmNpcCallUserId;
+    playerSelect.appendChild(option);
+  }
+  playerField.append(playerLabel, playerSelect);
+
+  const preview = document.createElement("div");
+  preview.className = "fc-gm-call-preview";
+
+  const placeCall = document.createElement("button");
+  placeCall.className = "fc-create-group-button fc-place-npc-call";
+  placeCall.type = "button";
+  placeCall.innerHTML = `<i class="fa-solid fa-phone"></i><span>Place Call</span>`;
+
+  const updatePreview = () => {
+    state.gmNpcCallActorId = actorSelect.value || null;
+    state.gmNpcCallUserId = playerSelect.value || null;
+    const actor = game.actors.get(state.gmNpcCallActorId);
+    const user = game.users.get(state.gmNpcCallUserId);
+    preview.replaceChildren();
+
+    if (actor) {
+      const img = document.createElement("img");
+      img.src = getActorAvatar(actor);
+      img.alt = "";
+      img.className = "fc-gm-call-preview-avatar";
+      const text = document.createElement("div");
+      text.className = "fc-contact-text";
+      const name = document.createElement("div");
+      name.className = "fc-contact-name";
+      name.textContent = actor.name;
+      const detail = document.createElement("div");
+      detail.className = "fc-contact-preview";
+      detail.textContent = user ? `Calling ${getUserDisplayName(user)}` : "Choose a player";
+      text.append(name, detail);
+      preview.append(img, text);
+    }
+
+    placeCall.disabled = !actor || !user?.active || Boolean(state.call);
+    placeCall.title = !user?.active ? "Selected player is offline" : `Call ${getUserDisplayName(user)} as ${actor?.name || "NPC"}`;
+  };
+
+  actorSelect.addEventListener("change", updatePreview);
+  playerSelect.addEventListener("change", updatePreview);
+  placeCall.addEventListener("click", () => {
+    const actor = game.actors.get(state.gmNpcCallActorId);
+    const user = game.users.get(state.gmNpcCallUserId);
+    if (!actor || !user) return;
+    startCallWithContext({
+      callerIdentity: identityFromActor(actor),
+      calleeIdentity: identityFromUser(user),
+      targetUserId: user.id
+    });
+  });
+
+  form.append(actorField, playerField, preview, placeCall);
+  container.appendChild(form);
+  updatePreview();
 }
 
 function renderNpcManager(container) {
@@ -1784,10 +1938,15 @@ function normalizeCallIdentity(identity) {
 function initiateCallFromCurrentConversation() {
   const context = getCallInitiationContext();
   if (!context) return;
+  startCallWithContext(context);
+}
+
+function startCallWithContext(context) {
+  if (!context || state.call) return;
 
   const target = game.users.get(context.targetUserId);
   if (!target?.active) {
-    ui.notifications.warn(`${context.calleeIdentity.name} is offline.`);
+    ui.notifications.warn(`${context.calleeIdentity?.name || "That player"} is offline.`);
     return;
   }
 
@@ -2035,6 +2194,9 @@ function resetCallToHome() {
   state.selectedContactId = null;
   state.actingNpcId = null;
   state.npcManagerOpen = false;
+  state.gmNpcCallOpen = false;
+  state.gmNpcCallActorId = null;
+  state.gmNpcCallUserId = null;
 
   if (state.root) {
     state.root.hidden = false;

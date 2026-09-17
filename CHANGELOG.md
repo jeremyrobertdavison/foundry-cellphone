@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.4
+
+- Added a GM-only **Call Player as NPC** control to the Direct Messages screen.
+- GMs can initiate a call as any unassigned NPC Actor, even if that Actor is not enabled as a player messaging contact.
+- Added dedicated NPC caller and player recipient selectors with online/offline awareness.
+- The recipient sees the selected NPC Actor name and portrait on the incoming and active call screens.
+- Existing NPC-contact calls, player-to-player calls, messaging, typing indicators, and group chats remain unchanged.
+
 ## 1.1.3
 
 - Hotfix: enabled the Foundry module socket namespace in `module.json` with `"socket": true`.

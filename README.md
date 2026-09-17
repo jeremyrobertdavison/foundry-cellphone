@@ -2,7 +2,7 @@
 
 An immersive cellphone UI for modern-day Foundry VTT campaigns.
 
-Version 1.1.3 is a signaling hotfix for the live call and typing systems. It enables the Foundry module socket namespace required for real-time client-to-client events. Version 1.1.2 added live roleplay call screens. Players can call each other from direct-message threads, and GMs can place incoming calls to players from the identity of an enabled NPC. Accepted calls show the other party's portrait, a live call timer, and a synchronized red hang-up control.
+Version 1.1.4 adds a GM-only **Call Player as NPC** picker. A GM can choose any unassigned NPC Actor in the world and any non-GM player, then place a roleplay call without first enabling that NPC as a messaging contact. The player sees the selected NPC name and Actor portrait as the caller. Version 1.1.3 enabled the module socket namespace required for live calls and typing indicators.
 
 ## Features
 
@@ -22,6 +22,7 @@ Version 1.1.3 is a signaling hotfix for the live call and typing systems. It ena
 - **Live typing indicators** in group chats and direct messages
 - **Player-to-player call screens** from direct-message threads
 - **GM-triggered NPC incoming calls** to selected players
+- GM-only **Call Player as NPC** picker can use any unassigned NPC Actor, independent of messaging contacts
 - Incoming calls automatically pop open the cellphone on the recipient's screen
 - Incoming call screen with caller portrait, Accept, and Decline controls
 - Outgoing ringing screen with Cancel control
@@ -54,16 +55,18 @@ Version 1.1.3 is a signaling hotfix for the live call and typing systems. It ena
 
 Offline users cannot be called. Unanswered calls automatically time out.
 
-## GM calling a player as an NPC
+## GM calling a player as any NPC
 
-1. As GM, open **Direct**.
-2. Select an enabled NPC contact.
-3. Choose the player the NPC should call.
-4. Open that NPC/player conversation.
-5. Click the green phone button.
-6. The player's phone pops open showing the NPC's Actor portrait and name as the caller.
+1. As GM, open the cellphone and choose **Direct**.
+2. Click **Call Player as NPC**.
+3. Choose an NPC Actor from **Call as**. The Actor does not need to be enabled as a messaging contact.
+4. Choose a player from **Call player**. Offline players are labeled and cannot be called.
+5. Click **Place Call**.
+6. The player's phone automatically opens showing the selected NPC Actor portrait and name as the caller.
 7. If the player accepts, the GM sees the player's portrait while the player continues to see the NPC portrait.
 8. Either side can end the call with the red **Hang Up** button.
+
+The older conversation-based path also remains available for enabled NPC messaging contacts: select the NPC, choose the player, open the conversation, and click the green phone button.
 
 ## Call behavior and audio
 
@@ -131,7 +134,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.1.3.zip
+foundry-cellphone-v1.1.4.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md
