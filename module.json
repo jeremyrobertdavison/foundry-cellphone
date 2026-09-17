@@ -2,7 +2,7 @@
   "id": "foundry-cellphone",
   "title": "Foundry Cellphone",
   "description": "An immersive in-game cellphone interface for modern Foundry VTT campaigns with messaging, mixed PC/NPC group chats, live typing indicators, and roleplay call screens.",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "authors": [
     {
       "name": "Jeremy Davison"
@@ -14,11 +14,12 @@
   },
   "url": "https://github.com/jeremyrobertdavison/foundry-cellphone",
   "manifest": "https://raw.githubusercontent.com/jeremyrobertdavison/foundry-cellphone/main/module.json",
-  "download": "https://github.com/jeremyrobertdavison/foundry-cellphone/releases/download/v1.1.2/foundry-cellphone-v1.1.2.zip",
+  "download": "https://github.com/jeremyrobertdavison/foundry-cellphone/releases/download/v1.1.3/foundry-cellphone-v1.1.3.zip",
   "esmodules": [
     "scripts/foundry-cellphone.js"
   ],
   "styles": [
     "styles/foundry-cellphone.css"
-  ]
+  ],
+  "socket": true
 }

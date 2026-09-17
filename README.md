@@ -2,7 +2,7 @@
 
 An immersive cellphone UI for modern-day Foundry VTT campaigns.
 
-Version 1.1.2 adds live roleplay call screens. Players can call each other from direct-message threads, and GMs can place incoming calls to players from the identity of an enabled NPC. Accepted calls show the other party's portrait, a live call timer, and a synchronized red hang-up control.
+Version 1.1.3 is a signaling hotfix for the live call and typing systems. It enables the Foundry module socket namespace required for real-time client-to-client events. Version 1.1.2 added live roleplay call screens. Players can call each other from direct-message threads, and GMs can place incoming calls to players from the identity of an enabled NPC. Accepted calls show the other party's portrait, a live call timer, and a synchronized red hang-up control.
 
 ## Features
 
@@ -34,12 +34,13 @@ Version 1.1.2 adds live roleplay call screens. Players can call each other from 
 - Unread badges per group and per direct-message thread
 - Enter to send; Shift+Enter for a new line
 - Phone messages are hidden from the normal Foundry chat feed
-- Existing v1.0.0 through v1.1.1 message history remains readable
+- Existing v1.0.0 through v1.1.2 message history remains readable
 
 ## Foundry compatibility
 
 - Minimum: Foundry VTT v12
 - Verified target: Foundry VTT v13.350
+- Module socket namespace enabled for calls and typing indicators
 
 ## Calling another player
 
@@ -66,7 +67,7 @@ Offline users cannot be called. Unanswered calls automatically time out.
 
 ## Call behavior and audio
 
-The call feature in v1.1.2 is a synchronized roleplay interface and signaling system. It controls ringing, accepting, declining, call state, portraits, timers, and hang-up behavior through the Foundry module socket. It does **not** transmit microphone or voice audio. Use your normal table voice method (Foundry's configured A/V, Discord, in-person conversation, etc.) for the actual spoken dialogue.
+The call feature is a synchronized roleplay interface and signaling system. It controls ringing, accepting, declining, call state, portraits, timers, and hang-up behavior through the Foundry module socket. It does **not** transmit microphone or voice audio. Use your normal table voice method (Foundry's configured A/V, Discord, in-person conversation, etc.) for the actual spoken dialogue.
 
 Call state is ephemeral and is not stored as a ChatMessage or written into message history.
 
@@ -130,7 +131,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.1.2.zip
+foundry-cellphone-v1.1.3.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

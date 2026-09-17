@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3
+
+- Hotfix: enabled the Foundry module socket namespace in `module.json` with `"socket": true`.
+- Restores delivery of live call offers, answers, declines, hang-ups, busy signals, and typing indicators between connected clients.
+- No message-history migration is required.
+
 ## 1.1.2
 
 - Added live incoming and outgoing call screens using the existing cellphone frame.
