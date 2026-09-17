@@ -2,11 +2,11 @@
 
 An immersive cellphone UI for modern-day Foundry VTT campaigns.
 
-Version 1.1.1 adds live typing indicators and true multi-thread group chats. Any player can start a group chat and choose multiple player and NPC contacts. GMs can participate in mixed groups from the perspective of any NPC included in that group.
+Version 1.1.2 adds live roleplay call screens. Players can call each other from direct-message threads, and GMs can place incoming calls to players from the identity of an enabled NPC. Accepted calls show the other party's portrait, a live call timer, and a synchronized red hang-up control.
 
 ## Features
 
-- Cellphone button on the Foundry interface
+- Cellphone button on the Foundry interface with unread-message badge
 - Center-screen draggable phone UI using a transparent PNG phone frame
 - Persistent **Party Chat** retained from earlier versions
 - Multiple persistent **custom group chats**
@@ -20,19 +20,55 @@ Version 1.1.1 adds live typing indicators and true multi-thread group chats. Any
 - Players can privately text enabled NPC contacts
 - GMs can select an NPC and text a player **as that NPC**
 - **Live typing indicators** in group chats and direct messages
-- Typing indicators display the active player or NPC identity, such as `Nick Fury is typing…`
+- **Player-to-player call screens** from direct-message threads
+- **GM-triggered NPC incoming calls** to selected players
+- Incoming calls automatically pop open the cellphone on the recipient's screen
+- Incoming call screen with caller portrait, Accept, and Decline controls
+- Outgoing ringing screen with Cancel control
+- Active call screen with remote portrait, call-duration timer, and red Hang Up button
+- Hanging up terminates the call on both clients and returns both phones to the main screen
+- Busy handling and automatic no-answer timeout
 - Assigned character names/portraits are used for Foundry users when available
 - Actor names/portraits are used for NPC contacts
 - Online/offline indicators for player contacts
 - Unread badges per group and per direct-message thread
 - Enter to send; Shift+Enter for a new line
 - Phone messages are hidden from the normal Foundry chat feed
-- Existing v1.0.0 and v1.1.0 Party Chat / DM history remains readable
+- Existing v1.0.0 through v1.1.1 message history remains readable
 
 ## Foundry compatibility
 
 - Minimum: Foundry VTT v12
 - Verified target: Foundry VTT v13.350
+
+## Calling another player
+
+1. Open the cellphone and choose **Direct**.
+2. Open a direct-message thread with another Foundry user.
+3. Click the green phone button in the conversation header.
+4. The other user's cellphone automatically opens to an incoming-call screen.
+5. The recipient can **Accept** or **Decline**.
+6. Once accepted, both sides see the other party's portrait, a live call timer, and a red **Hang Up** control.
+7. Either side can hang up; the call ends on both clients and both phones return to the main screen.
+
+Offline users cannot be called. Unanswered calls automatically time out.
+
+## GM calling a player as an NPC
+
+1. As GM, open **Direct**.
+2. Select an enabled NPC contact.
+3. Choose the player the NPC should call.
+4. Open that NPC/player conversation.
+5. Click the green phone button.
+6. The player's phone pops open showing the NPC's Actor portrait and name as the caller.
+7. If the player accepts, the GM sees the player's portrait while the player continues to see the NPC portrait.
+8. Either side can end the call with the red **Hang Up** button.
+
+## Call behavior and audio
+
+The call feature in v1.1.2 is a synchronized roleplay interface and signaling system. It controls ringing, accepting, declining, call state, portraits, timers, and hang-up behavior through the Foundry module socket. It does **not** transmit microphone or voice audio. Use your normal table voice method (Foundry's configured A/V, Discord, in-person conversation, etc.) for the actual spoken dialogue.
+
+Call state is ephemeral and is not stored as a ChatMessage or written into message history.
 
 ## Creating a group chat
 
@@ -67,7 +103,7 @@ Daisy Johnson and Nick Fury are typing…
 2. Open **Direct**.
 3. Click **Manage NPC Contacts**.
 4. Enable any Actor that should appear as a cellphone contact.
-5. Enabled NPCs are available for both direct messages and new group chats.
+5. Enabled NPCs are available for direct messages, group chats, and GM-originated NPC calls.
 
 Actors assigned directly to Foundry users are excluded from the NPC-management list so player characters are not duplicated as NPC contacts.
 
@@ -94,7 +130,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.1.1.zip
+foundry-cellphone-v1.1.2.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

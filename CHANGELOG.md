@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.2
+
+- Added live incoming and outgoing call screens using the existing cellphone frame.
+- Players can call other Foundry users from a direct-message thread.
+- GMs can select an enabled NPC, choose a player, and place a call from that NPC's identity.
+- Incoming calls automatically open the phone for the recipient.
+- Incoming calls display the caller portrait and provide Accept and Decline controls.
+- Accepted calls keep the remote caller/contact portrait on screen and display a live call-duration timer.
+- Added a red Hang Up control that terminates the call on both clients and returns both phones to the main screen.
+- Outgoing ringing calls can be cancelled and unanswered calls time out automatically.
+- Added busy handling when a recipient is already in another cellphone call.
+- Call signaling is ephemeral over the Foundry module socket and is not stored in chat history.
+- Calls are roleplay signaling/UI only; v1.1.2 does not transmit voice audio.
+
 ## 1.1.1
 
 - Added live typing indicators for player DMs, NPC DMs, Party Chat, and custom group chats.

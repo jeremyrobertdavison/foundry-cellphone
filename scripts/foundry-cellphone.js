@@ -7,6 +7,7 @@ const MAX_RENDERED_MESSAGES = 300;
 const TYPING_KEEPALIVE_MS = 700;
 const TYPING_STOP_MS = 1500;
 const TYPING_EXPIRE_MS = 3000;
+const CALL_RING_TIMEOUT_MS = 30000;
 
 const state = {
   phoneOpen: false,
@@ -34,6 +35,9 @@ const state = {
     stopTimer: null
   },
   typingSweepTimer: null,
+  call: null,
+  callRingTimer: null,
+  callTimerInterval: null,
   root: null,
   launcher: null,
   drag: null
@@ -145,13 +149,34 @@ function buildPhone() {
           <span class="fc-status-icons"><i class="fa-solid fa-signal"></i> <i class="fa-solid fa-wifi"></i> <i class="fa-solid fa-battery-three-quarters"></i></span>
         </div>
 
+        <section class="fc-call-screen" hidden>
+          <div class="fc-call-kicker"></div>
+          <img class="fc-call-avatar" src="icons/svg/mystery-man.svg" alt="Caller portrait">
+          <div class="fc-call-name">Caller</div>
+          <div class="fc-call-status">Incoming call…</div>
+          <div class="fc-call-timer" hidden>00:00</div>
+          <div class="fc-call-actions">
+            <button class="fc-call-action fc-call-accept" type="button" aria-label="Accept call">
+              <i class="fa-solid fa-phone"></i>
+              <span>Accept</span>
+            </button>
+            <button class="fc-call-action fc-call-end" type="button" aria-label="End call">
+              <i class="fa-solid fa-phone-slash"></i>
+              <span class="fc-call-end-label">Decline</span>
+            </button>
+          </div>
+        </section>
+
         <header class="fc-header">
           <button class="fc-icon-button fc-back" type="button" aria-label="Back" hidden><i class="fa-solid fa-chevron-left"></i></button>
           <div class="fc-header-title-wrap">
             <div class="fc-header-title">Messages</div>
             <div class="fc-header-subtitle"></div>
           </div>
-          <button class="fc-icon-button fc-close" type="button" aria-label="Close phone"><i class="fa-solid fa-xmark"></i></button>
+          <div class="fc-header-actions">
+            <button class="fc-icon-button fc-call-button" type="button" aria-label="Call contact" title="Call" hidden><i class="fa-solid fa-phone"></i></button>
+            <button class="fc-icon-button fc-close" type="button" aria-label="Close phone"><i class="fa-solid fa-xmark"></i></button>
+          </div>
         </header>
 
         <nav class="fc-tabs" aria-label="Message type">
@@ -198,6 +223,9 @@ function buildPhone() {
   state.root = root;
 
   root.querySelector(".fc-close").addEventListener("click", closePhone);
+  root.querySelector(".fc-call-button").addEventListener("click", initiateCallFromCurrentConversation);
+  root.querySelector(".fc-call-accept").addEventListener("click", acceptIncomingCall);
+  root.querySelector(".fc-call-end").addEventListener("click", endCurrentCall);
   root.querySelectorAll(".fc-tab").forEach((button) => {
     button.addEventListener("click", () => setMode(button.dataset.mode));
   });
@@ -230,6 +258,10 @@ function buildPhone() {
 }
 
 function togglePhone() {
+  if (state.call) {
+    openPhone();
+    return;
+  }
   if (state.phoneOpen) closePhone();
   else openPhone();
 }
@@ -589,8 +621,27 @@ function renderPhone() {
   if (!state.root) return;
 
   updateStatusTime();
+
+  const callScreen = state.root.querySelector(".fc-call-screen");
+  const header = state.root.querySelector(".fc-header");
+  const tabs = state.root.querySelector(".fc-tabs");
+  const content = state.root.querySelector(".fc-content");
+  const inCallUi = Boolean(state.call);
+
+  callScreen.hidden = !inCallUi;
+  header.hidden = inCallUi;
+  tabs.hidden = inCallUi;
+  content.hidden = inCallUi;
+
+  if (inCallUi) {
+    renderCallScreen();
+    updateBadges();
+    return;
+  }
+
   updateTabs();
   updateHeader();
+  updateCallButton();
 
   const conversation = state.root.querySelector(".fc-conversation-view");
   const contactsView = state.root.querySelector(".fc-contacts-view");
@@ -1659,6 +1710,340 @@ function makeId() {
 }
 
 // ---------------------------
+// Call signaling and call UI
+// ---------------------------
+
+function updateCallButton() {
+  const button = state.root?.querySelector(".fc-call-button");
+  if (!button) return;
+
+  const context = getCallInitiationContext();
+  button.hidden = !context;
+  if (!context) return;
+
+  const target = game.users.get(context.targetUserId);
+  button.disabled = !target?.active;
+  button.title = target?.active ? `Call ${context.calleeIdentity.name}` : `${context.calleeIdentity.name} is offline`;
+}
+
+function getCallInitiationContext() {
+  if (state.call || state.mode !== "dm" || !hasOpenDirectConversation()) return null;
+
+  if (game.user.isGM && state.actingNpcId && state.selectedContactId) {
+    const actor = game.actors.get(state.actingNpcId);
+    const user = game.users.get(state.selectedContactId);
+    if (!actor || !user) return null;
+    return {
+      callerIdentity: identityFromActor(actor),
+      calleeIdentity: identityFromUser(user),
+      targetUserId: user.id
+    };
+  }
+
+  if (state.selectedContactType === "user" && state.selectedContactId) {
+    const user = game.users.get(state.selectedContactId);
+    if (!user) return null;
+    return {
+      callerIdentity: identityFromUser(game.user),
+      calleeIdentity: identityFromUser(user),
+      targetUserId: user.id
+    };
+  }
+
+  return null;
+}
+
+function identityFromUser(user) {
+  return {
+    type: "user",
+    id: user.id,
+    name: getUserDisplayName(user),
+    avatar: getUserAvatar(user)
+  };
+}
+
+function identityFromActor(actor) {
+  return {
+    type: "npc",
+    id: actor.id,
+    name: actor.name,
+    avatar: getActorAvatar(actor)
+  };
+}
+
+function normalizeCallIdentity(identity) {
+  if (!identity) return { type: "user", id: null, name: "Unknown", avatar: "icons/svg/mystery-man.svg" };
+  return {
+    type: identity.type === "npc" ? "npc" : "user",
+    id: identity.id ?? null,
+    name: identity.name || "Unknown",
+    avatar: identity.avatar || "icons/svg/mystery-man.svg"
+  };
+}
+
+function initiateCallFromCurrentConversation() {
+  const context = getCallInitiationContext();
+  if (!context) return;
+
+  const target = game.users.get(context.targetUserId);
+  if (!target?.active) {
+    ui.notifications.warn(`${context.calleeIdentity.name} is offline.`);
+    return;
+  }
+
+  stopTyping();
+  const callId = makeId();
+  state.call = {
+    callId,
+    phase: "outgoing",
+    localRole: "caller",
+    callerUserId: game.user.id,
+    calleeUserId: target.id,
+    callerIdentity: normalizeCallIdentity(context.callerIdentity),
+    calleeIdentity: normalizeCallIdentity(context.calleeIdentity),
+    startedAt: null
+  };
+
+  openPhoneForCall();
+  scheduleRingTimeout();
+  emitCallSignal("call-offer", {
+    callId,
+    targetUserId: target.id,
+    callerUserId: game.user.id,
+    calleeUserId: target.id,
+    callerIdentity: state.call.callerIdentity,
+    calleeIdentity: state.call.calleeIdentity
+  });
+}
+
+function acceptIncomingCall() {
+  if (state.call?.phase !== "incoming") return;
+
+  clearCallRingTimer();
+  const startedAt = Date.now();
+  state.call.phase = "active";
+  state.call.startedAt = startedAt;
+  startCallTimer();
+
+  emitCallSignal("call-answer", {
+    callId: state.call.callId,
+    targetUserId: state.call.callerUserId,
+    callerUserId: state.call.callerUserId,
+    calleeUserId: state.call.calleeUserId,
+    startedAt
+  });
+  renderPhone();
+}
+
+function endCurrentCall() {
+  if (!state.call) return;
+
+  const call = state.call;
+  const peerUserId = call.localRole === "caller" ? call.calleeUserId : call.callerUserId;
+  const signalType = call.phase === "incoming" ? "call-decline" : "call-end";
+
+  emitCallSignal(signalType, {
+    callId: call.callId,
+    targetUserId: peerUserId,
+    callerUserId: call.callerUserId,
+    calleeUserId: call.calleeUserId
+  });
+  resetCallToHome();
+}
+
+function emitCallSignal(type, data) {
+  if (!game.socket) return;
+  game.socket.emit(SOCKET_NAME, {
+    type,
+    ...data,
+    authorUserId: game.user.id,
+    sentAt: Date.now()
+  });
+}
+
+function handleCallSignal(payload) {
+  if (!payload?.type?.startsWith("call-")) return;
+  if (payload.targetUserId && payload.targetUserId !== game.user.id) return;
+
+  if (payload.type === "call-offer") {
+    handleIncomingCallOffer(payload);
+    return;
+  }
+
+  if (!state.call || payload.callId !== state.call.callId) return;
+
+  if (payload.type === "call-answer") {
+    if (state.call.phase !== "outgoing" || state.call.localRole !== "caller") return;
+    clearCallRingTimer();
+    state.call.phase = "active";
+    state.call.startedAt = Number(payload.startedAt) || Date.now();
+    startCallTimer();
+    openPhoneForCall();
+    return;
+  }
+
+  if (payload.type === "call-busy") {
+    ui.notifications.info(`${state.call.calleeIdentity?.name || "That contact"} is already on another call.`);
+    resetCallToHome();
+    return;
+  }
+
+  if (payload.type === "call-decline") {
+    ui.notifications.info(`${state.call.calleeIdentity?.name || "The contact"} declined the call.`);
+    resetCallToHome();
+    return;
+  }
+
+  if (payload.type === "call-end") {
+    resetCallToHome();
+  }
+}
+
+function handleIncomingCallOffer(payload) {
+  if (!payload.callId || !payload.callerUserId || !payload.calleeUserId) return;
+
+  if (state.call) {
+    emitCallSignal("call-busy", {
+      callId: payload.callId,
+      targetUserId: payload.callerUserId,
+      callerUserId: payload.callerUserId,
+      calleeUserId: payload.calleeUserId
+    });
+    return;
+  }
+
+  stopTyping();
+  state.call = {
+    callId: payload.callId,
+    phase: "incoming",
+    localRole: "callee",
+    callerUserId: payload.callerUserId,
+    calleeUserId: payload.calleeUserId,
+    callerIdentity: normalizeCallIdentity(payload.callerIdentity),
+    calleeIdentity: normalizeCallIdentity(payload.calleeIdentity),
+    startedAt: null
+  };
+
+  openPhoneForCall();
+  scheduleRingTimeout();
+}
+
+function openPhoneForCall() {
+  if (!state.root) buildPhone();
+  state.phoneOpen = true;
+  state.root.hidden = false;
+  state.root.classList.add("is-open");
+  renderPhone();
+}
+
+function renderCallScreen() {
+  if (!state.call || !state.root) return;
+
+  const remoteIdentity = state.call.localRole === "caller" ? state.call.calleeIdentity : state.call.callerIdentity;
+  const kicker = state.root.querySelector(".fc-call-kicker");
+  const avatar = state.root.querySelector(".fc-call-avatar");
+  const name = state.root.querySelector(".fc-call-name");
+  const status = state.root.querySelector(".fc-call-status");
+  const timer = state.root.querySelector(".fc-call-timer");
+  const accept = state.root.querySelector(".fc-call-accept");
+  const end = state.root.querySelector(".fc-call-end");
+  const endLabel = state.root.querySelector(".fc-call-end-label");
+
+  avatar.src = remoteIdentity?.avatar || "icons/svg/mystery-man.svg";
+  avatar.alt = `${remoteIdentity?.name || "Caller"} portrait`;
+  name.textContent = remoteIdentity?.name || "Unknown Caller";
+  kicker.textContent = remoteIdentity?.type === "npc" ? "NPC CALL" : "PHONE CALL";
+
+  accept.hidden = state.call.phase !== "incoming";
+  end.hidden = false;
+
+  if (state.call.phase === "incoming") {
+    status.textContent = "Incoming call…";
+    timer.hidden = true;
+    endLabel.textContent = "Decline";
+  } else if (state.call.phase === "outgoing") {
+    status.textContent = "Calling…";
+    timer.hidden = true;
+    endLabel.textContent = "Cancel";
+  } else {
+    status.textContent = "Connected";
+    timer.hidden = false;
+    endLabel.textContent = "Hang Up";
+    updateCallTimerDisplay();
+  }
+}
+
+function startCallTimer() {
+  clearCallTimer();
+  updateCallTimerDisplay();
+  state.callTimerInterval = window.setInterval(updateCallTimerDisplay, 1000);
+}
+
+function updateCallTimerDisplay() {
+  if (!state.call || state.call.phase !== "active" || !state.call.startedAt) return;
+  const el = state.root?.querySelector(".fc-call-timer");
+  if (!el) return;
+
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - state.call.startedAt) / 1000));
+  const hours = Math.floor(elapsedSeconds / 3600);
+  const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+  const seconds = elapsedSeconds % 60;
+  el.textContent = hours > 0
+    ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function scheduleRingTimeout() {
+  clearCallRingTimer();
+  const callId = state.call?.callId;
+  state.callRingTimer = window.setTimeout(() => {
+    if (!state.call || state.call.callId !== callId || !["incoming", "outgoing"].includes(state.call.phase)) return;
+
+    if (state.call.localRole === "caller") {
+      emitCallSignal("call-end", {
+        callId: state.call.callId,
+        targetUserId: state.call.calleeUserId,
+        callerUserId: state.call.callerUserId,
+        calleeUserId: state.call.calleeUserId
+      });
+      ui.notifications.info("No answer.");
+    }
+    resetCallToHome();
+  }, CALL_RING_TIMEOUT_MS);
+}
+
+function clearCallRingTimer() {
+  clearTimeout(state.callRingTimer);
+  state.callRingTimer = null;
+}
+
+function clearCallTimer() {
+  clearInterval(state.callTimerInterval);
+  state.callTimerInterval = null;
+}
+
+function resetCallToHome() {
+  clearCallRingTimer();
+  clearCallTimer();
+  state.call = null;
+  state.phoneOpen = true;
+  state.mode = "group";
+  state.selectedGroupId = null;
+  state.groupCreatorOpen = false;
+  state.groupSenderKey = null;
+  state.selectedContactType = null;
+  state.selectedContactId = null;
+  state.actingNpcId = null;
+  state.npcManagerOpen = false;
+
+  if (state.root) {
+    state.root.hidden = false;
+    state.root.classList.add("is-open");
+    renderPhone();
+  }
+}
+
+// ---------------------------
 // Typing indicators
 // ---------------------------
 
@@ -1742,7 +2127,14 @@ function emitTyping(active, context, identity) {
 }
 
 function onSocketMessage(payload) {
-  if (!payload || payload.type !== "typing") return;
+  if (!payload) return;
+
+  if (payload.type?.startsWith("call-")) {
+    handleCallSignal(payload);
+    return;
+  }
+
+  if (payload.type !== "typing") return;
   if (payload.authorUserId === game.user.id) return;
   if (Array.isArray(payload.targetUserIds) && !payload.targetUserIds.includes(game.user.id)) return;
   if (!payload.contextKey || !payload.senderId) return;
