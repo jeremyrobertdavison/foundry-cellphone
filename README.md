@@ -1,122 +1,80 @@
 # Foundry Cellphone
 
-An immersive in-game cellphone interface for modern-day Foundry VTT campaigns.
+An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **1.6.0** adds a sixth cellphone app: **News**. The GM can publish a simple in-world news feed with headlines, blurbs, publisher names, bylines, and custom publication date/time values. Players have read-only access to the feed. Notes, Browser, Friendpage, Mission Log, messaging, calls, and NPC roleplay remain available.
+Version **1.9.0** adds the **Maps** app: GM-managed reference maps with draggable character markers, multiple map support, optional player-restricted visibility, and an enlarged inspection view. Maps are informational only and do not move Foundry tokens or alter Scene coordinates.
 
-## Features
+## Cellphone apps
 
-- Cellphone **Home Screen** with Messages, Mission Log, Friendpage, Browser, Notes, and News apps
-- **News** app with a GM-managed public headline feed
-- Publish headline, blurb, publisher, author, and publication date/time
-- Players have read-only News access; stories remain entirely inside the phone
-- **Notes** app with private per-user note storage
-- Create, edit, and delete personal notes with titles and freeform text
-- Notes persist in the Foundry world and are hidden from the normal Foundry chat feed
-- **Browser** app with a generic faux-browser interface
-- GM-managed external website shortcut tiles
-- External shortcuts open in the user’s real browser in a new tab
-- Browser search indexes Foundry Journal text pages the current user has permission to observe
-- Journal search results and Journal content open inside the cellphone interface
-- Journal secret blocks are excluded from search snippets for users who do not own the page/entry
-- **Friendpage global feed** showing public posts from active Friendpage profiles
-- GM-managed **active profile list** for Foundry users and NPC Actors
-- A **profile and wall** for every enabled user or NPC identity, using assigned character/Actor names and portraits
-- GM-only **Posting as** selector for enabled NPC social identities
-- Post a status to your own wall
-- Write a public post on another user's wall
-- Public comments on Friendpage posts
-- Like and dislike reactions with live counts
-- One active reaction per Friendpage profile per post; NPC identities controlled by the GM react independently
-- Click a post author or wall recipient to jump directly to that profile
-- Persistent Friendpage history stored as module-owned Foundry records and hidden from the normal Foundry chat feed
-- **Messages** app with Party Chat, custom groups, DMs, NPC texting, typing indicators, and calls
-- Group messages identify incoming participants with a compact name + avatar strip; GM-sent NPC messages also show the active NPC identity
-- **Mission Log** app with GM-managed public or restricted assignments
-- GM-triggered calls as NPC Actors
-- Existing message and mission history from earlier releases remains readable
+- **Messages** — Party Chat, custom groups, player DMs, NPC texting, typing indicators, player calls, and GM calls as NPCs.
+- **Mission Log** — GM-managed assignments and briefings with all-player or selected-player visibility.
+- **Friendpage** — in-world social media with user/NPC profiles, walls, posts, comments, Likes, and Dislikes.
+- **Browser** — GM-configured external website shortcuts plus permission-aware Foundry Journal search inside the phone.
+- **Notes** — private per-user notes with title/body editing and deletion.
+- **News** — GM-authored headline feed with blurb, publisher, author, and publication date/time.
+- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, and Guess My Number.
+- **Maps** — GM-managed reference maps with character markers and player visibility controls.
 
-## News
+## Maps
 
-The News app is a read-only public feed for players. GMs can publish headlines with a short blurb, publisher, author, and publication date/time. Stories are displayed inside the phone and do not open external pages.
+Open the cellphone and choose **Maps**. Players see only maps available to their Foundry user. Use the previous/next controls to cycle through available maps and **Enlarge** to inspect a larger scrollable version inside the phone.
 
-## Notes
+### GM map management
 
-Open the cellphone and choose **Notes**. Notes are private to the current Foundry user inside the module interface. Each note has a title, body text, created time, and updated time. Users can create, edit, and delete their own notes.
+GMs receive a **Manage Maps** button. Each map supports:
 
-Notes are stored as module-owned, self-whispered Foundry records so they persist with the world while remaining hidden from the normal chat feed. They are intended for private in-game note taking, not encrypted secret storage from the server administrator.
+- Map name
+- Background image selected through the Foundry file picker or entered as a file path
+- Visibility to **All Players** or **Selected Players**
+- Multiple player-character and NPC Actor markers
+- Drag-and-drop marker placement directly on the map
+- Optional custom marker labels
+- Reordering maps with move-up/move-down controls
+- Editing and deletion
+
+Marker coordinates are stored as percentages, so positions remain proportional when the map is displayed at different sizes. The same character can appear independently on multiple maps.
+
+Restricted maps use Foundry ChatMessage whisper recipients so players who are not assigned are not recipients of the map record. Maps are module-owned internal records and are suppressed from the normal Foundry chat feed.
+
+**Maps are reference information only.** Moving a Maps marker does not move any token on a Foundry Scene.
 
 ## Browser
 
-Open the cellphone and choose **Browser**. The Browser app presents a generic in-world browser interface without using Firefox, Chrome, or other real-browser branding.
+The Browser app uses a generic in-world browser interface. GMs can configure named external shortcut tiles; clicking one opens the configured HTTP/HTTPS page in the user's real browser in a new tab.
 
-### External shortcuts
-
-GMs can choose **Manage** on the Browser start page and configure named shortcut tiles. Each shortcut stores a label, an HTTP/HTTPS URL, and a generic icon. Clicking a shortcut opens the configured site in the user’s actual browser as a new tab.
-
-### Journal search
-
-The Browser search field searches Foundry Journal text pages that the current user has permission to observe. Search matches Journal names, page names, and visible page text. Results remain inside the cellphone; selecting a result renders that Journal page in the phone interface.
-
-The Browser checks Foundry document permissions before indexing a Journal or page. Secret sections are excluded from search text for users who are not owners.
+The search field searches Foundry Journal text pages the current user has permission to observe. Results and Journal content open inside the cellphone interface. Secret Journal sections are excluded from search indexing for users who do not own the page/entry.
 
 ## Friendpage
 
-Open the cellphone and choose **Friendpage**.
+Friendpage provides a public in-world social feed. GMs can enable Foundry user profiles and unassigned NPC Actor profiles. Players post as their own active profile; GMs receive a **Posting as** selector for enabled NPC identities.
 
-### Feed
+Posts support comments, Likes, Dislikes, profile navigation, and posts on another profile's wall. Reactions are tracked per Friendpage profile, allowing multiple NPC identities controlled by the same GM to react independently.
 
-The Feed tab shows all Friendpage posts newest-first. A post on your own wall is treated as a status. A post on somebody else's wall displays both the author and the wall owner.
+## Notes
 
-Every post supports:
+Notes are private to the current Foundry user inside the module interface. Notes persist in the Foundry world as self-whispered module records and are hidden from the normal chat feed. They are intended for private in-game note taking, not encrypted storage from the server administrator.
 
-- Likes
-- Dislikes
-- Comments
-- Profile navigation
+## News
 
-All Friendpage content is public to the Foundry world. It is intended as in-character social-media roleplay rather than private communication.
+The News app is a read-only feed for players. GMs can publish, edit, and delete stories containing a headline, short blurb, publisher, author, and custom publication date/time.
 
-### Profiles and walls
+## Arcade
 
-Choose **Profiles** to browse every identity the GM has enabled for Friendpage. User profiles use the assigned Foundry character name and portrait when one is available, falling back to the Foundry username/avatar otherwise. NPC profiles use the Actor name and portrait.
+The Arcade includes five lightweight single-player games:
 
-Open a profile to view that profile's wall. Any user with an active Friendpage identity can publish directly to an enabled player or NPC wall.
+- **Snake** — keyboard/WASD and on-screen controls, pause/resume, local best score.
+- **Tic Tac Toe** — play against a simple phone AI with local win/loss/draw stats.
+- **Minesweeper** — 8×8 board, 10 mines, first-click safety, Flag Mode/right-click flagging.
+- **Runner** — generic endless jump-and-dodge game with keyboard/tap controls and local best distance.
+- **Guess My Number** — guess a number from 1–100 with Too high / Too low feedback.
 
-### GM profile management and NPC posting
-
-GMs have a **Manage Profiles** control on the Profiles tab. Before the GM saves a custom profile configuration, all Foundry user profiles remain enabled for compatibility with earlier Friendpage releases. The GM can then explicitly enable or disable user profiles and unassigned NPC Actor profiles.
-
-When one or more NPC profiles are active, the GM receives a **Posting as** selector. Switching this selector changes the identity used for new Friendpage statuses, wall posts, comments, Likes, and Dislikes. A single GM can therefore roleplay several NPC social accounts independently.
-
-### Reactions
-
-Each active Friendpage profile has one current reaction per post. A profile can:
-
-- Like a post
-- Dislike a post
-- Switch between Like and Dislike
-- Click the active reaction again to remove it
-
-Reaction counts are calculated from the latest reaction state for each active profile. This means two NPC profiles controlled by the same GM can each react separately.
-
-## Mission Log
-
-The Mission Log remains GM-managed and player read-only. Missions can be visible to everyone or restricted to selected player users. Restricted missions use Foundry whisper recipients rather than merely hiding data in the UI.
-
-## Messaging and calls
-
-The Messages app retains Party Chat, custom PC/NPC group chats, player DMs, GM-managed NPC text contacts, typing indicators, player-to-player calls, and GM calls as NPC Actors. Calls are roleplay signaling/UI only; voice audio continues through your normal Foundry/Discord/in-person setup.
+Snake and Runner automatically pause when appropriate, including when leaving Arcade or closing the phone.
 
 ## Foundry compatibility
 
 - Minimum: Foundry VTT v12
 - Verified target: Foundry VTT v13.350
 - Module socket namespace enabled for calls and typing indicators
-
-## Privacy note
-
-Friendpage is deliberately public in-world content. Text messages and restricted Mission Log entries continue to use their existing Foundry recipient controls. This module is intended for roleplaying data and does not provide encrypted communication.
 
 ## GitHub installation
 
@@ -137,7 +95,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.6.0.zip
+foundry-cellphone-v1.9.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md
@@ -146,16 +104,3 @@ foundry-cellphone-v1.6.0.zip
 ├── scripts/
 └── styles/
 ```
-
-
-## Arcade
-
-The cellphone includes an **Arcade** app with five lightweight single-player games:
-
-- **Snake** with keyboard/WASD and on-screen controls, pause/resume, and a local best score.
-- **Tic Tac Toe** against a simple phone AI with local win/loss/draw stats.
-- **Minesweeper** on an 8x8 board with 10 mines, first-click safety, Flag Mode/right-click flagging, and cleared-board stats.
-- **Runner**, a generic endless jump-and-dodge game with keyboard/tap controls and a local best distance.
-- **Guess My Number**, where the phone selects a number from 1 to 100 and responds with Too high, Too low, or Correct.
-
-Snake and Runner automatically pause if the phone is closed, the user leaves Arcade, or a call interrupts play. Arcade scores and results are stored as client-local Foundry settings for each user/browser profile.

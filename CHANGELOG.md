@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.9.0
+
+- Added the **Maps** cellphone app.
+- Added GM-managed creation, editing, deletion, and reordering of multiple reference maps.
+- Maps use Foundry-hosted background images selected through the file picker or entered by path.
+- Added player-character and NPC Actor markers with portraits.
+- GMs can drag markers directly on the map and optionally assign custom marker labels.
+- Marker positions are stored as percentage coordinates so they remain proportional across display sizes.
+- Added previous/next map navigation for players.
+- Added an enlarged scrollable map inspection mode inside the phone.
+- Added per-map visibility for All Players or Selected Players. Restricted maps use Foundry whisper recipients.
+- The same character can be placed independently on multiple maps.
+- Map markers are informational only and never move Foundry Scene tokens.
+- Map records are hidden from the normal Foundry chat feed.
+- Updated the Home Screen to a balanced two-column layout for eight apps.
+- Existing Messages, Mission Log, Friendpage, Browser, Notes, News, and Arcade behavior remains unchanged.
+
 ## 1.8.0
 
 - Expanded the **Arcade** from two games to five.

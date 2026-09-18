@@ -4,6 +4,7 @@ const MISSION_FLAG = "missionRecord";
 const FRIENDPAGE_FLAG = "friendpageRecord";
 const NOTE_FLAG = "noteRecord";
 const NEWS_FLAG = "newsRecord";
+const MAP_FLAG = "mapRecord";
 const NPC_CONTACTS_SETTING = "npcContacts";
 const MISSION_SEEN_SETTING = "missionSeen";
 const FRIENDPAGE_PROFILES_SETTING = "friendpageProfiles";
@@ -54,6 +55,11 @@ const state = {
   selectedNewsId: null,
   newsEditorOpen: false,
   newsDraft: { headline: "", blurb: "", author: "", publisher: "", publishedAt: "" },
+  selectedMapId: null,
+  mapManagerOpen: false,
+  mapEditorOpen: false,
+  mapExpanded: false,
+  mapEditorDraft: { id: null, name: "", image: "", visibility: "all", selectedUserIds: new Set(), markers: [], createdAt: null, sortIndex: 0 },
   arcadeGame: "menu",
   snake: {
     segments: [],
@@ -176,6 +182,12 @@ Hooks.on("renderChatMessage", (message, html) => {
 });
 
 Hooks.on("createChatMessage", (message) => {
+  if (isMapRecord(message)) {
+    const data = getMapData(message);
+    if (data && isMapVisibleToCurrentUser(data)) refreshAll();
+    return;
+  }
+
   if (isNewsRecord(message)) {
     refreshAll();
     return;
@@ -231,6 +243,11 @@ Hooks.on("createChatMessage", (message) => {
 });
 
 Hooks.on("updateChatMessage", (message) => {
+  if (isMapRecord(message)) {
+    refreshAll();
+    return;
+  }
+
   if (isNewsRecord(message)) {
     refreshAll();
     return;
@@ -334,6 +351,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-arcade"><i class="fa-solid fa-gamepad"></i></span>
               <span class="fc-app-label">Arcade</span>
             </button>
+            <button class="fc-app-icon fc-app-icon-maps" type="button" data-app="maps">
+              <span class="fc-app-symbol fc-app-symbol-maps"><i class="fa-solid fa-map-location-dot"></i></span>
+              <span class="fc-app-label">Maps</span>
+            </button>
           </div>
         </section>
 
@@ -423,6 +444,10 @@ function buildPhone() {
           <section class="fc-arcade-view" hidden>
             <div class="fc-arcade-content"></div>
           </section>
+
+          <section class="fc-maps-view" hidden>
+            <div class="fc-maps-content"></div>
+          </section>
         </main>
       </div>
 
@@ -491,7 +516,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -528,6 +553,12 @@ function openApp(app) {
   } else if (app === 'arcade') {
     state.arcadeGame = 'menu';
     pauseArcadeActionGames();
+  } else if (app === 'maps') {
+    state.selectedMapId = null;
+    state.mapManagerOpen = false;
+    state.mapEditorOpen = false;
+    state.mapExpanded = false;
+    resetMapDraft();
   }
   renderPhone();
 }
@@ -552,6 +583,11 @@ function goHome() {
   state.selectedNewsId = null;
   state.newsEditorOpen = false;
   resetNewsDraft();
+  state.selectedMapId = null;
+  state.mapManagerOpen = false;
+  state.mapEditorOpen = false;
+  state.mapExpanded = false;
+  resetMapDraft();
   renderPhone();
 }
 
@@ -584,6 +620,29 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "maps") {
+    if (state.mapEditorOpen) {
+      state.mapEditorOpen = false;
+      resetMapDraft();
+      renderPhone();
+      return;
+    }
+    if (state.mapManagerOpen) {
+      state.mapManagerOpen = false;
+      state.selectedMapId = null;
+      state.mapExpanded = false;
+      renderPhone();
+      return;
+    }
+    if (state.mapExpanded) {
+      state.mapExpanded = false;
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.app === "arcade") {
     if (state.arcadeGame !== "menu") {
@@ -1014,6 +1073,7 @@ function renderPhone() {
   const notesView = state.root.querySelector(".fc-notes-view");
   const newsView = state.root.querySelector(".fc-news-view");
   const arcadeView = state.root.querySelector(".fc-arcade-view");
+  const mapsView = state.root.querySelector(".fc-maps-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -1030,6 +1090,7 @@ function renderPhone() {
   notesView.hidden = true;
   newsView.hidden = true;
   arcadeView.hidden = true;
+  mapsView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -1091,6 +1152,13 @@ function renderPhone() {
     return;
   }
 
+  if (state.app === "maps") {
+    mapsView.hidden = false;
+    renderMapsView();
+    updateBadges();
+    return;
+  }
+
   tabs.hidden = false;
   updateTabs();
 
@@ -1141,6 +1209,22 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "maps") {
+    back.hidden = false;
+    if (state.mapEditorOpen) {
+      title.textContent = state.selectedMapId ? "Edit Map" : "New Map";
+      subtitle.textContent = "GM map editor";
+    } else if (state.mapManagerOpen) {
+      title.textContent = "Manage Maps";
+      subtitle.textContent = "GM map configuration";
+    } else {
+      const record = getCurrentMapRecord();
+      title.textContent = record?.data?.name || "Maps";
+      subtitle.textContent = record ? "Party location reference" : "Reference maps";
+    }
+    return;
+  }
 
   if (state.app === "arcade") {
     back.hidden = false;
@@ -3944,7 +4028,7 @@ function formatNoteDate(timestamp) {
 }
 
 function isInternalPhoneRecord(message) {
-  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message) || isNoteRecord(message) || isNewsRecord(message);
+  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message) || isNoteRecord(message) || isNewsRecord(message) || isMapRecord(message);
 }
 
 function isMissionRecord(message) {
@@ -4571,6 +4655,805 @@ function makeId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+
+// ---------------------------
+// Maps app
+// ---------------------------
+
+function isMapRecord(message) {
+  return Boolean(getMapData(message));
+}
+
+function getMapData(message) {
+  return message?.getFlag?.(MODULE_ID, MAP_FLAG) ?? message?.flags?.[MODULE_ID]?.[MAP_FLAG] ?? null;
+}
+
+function isMapVisibleToCurrentUser(data) {
+  if (!data) return false;
+  if (game.user?.isGM) return true;
+  if (data.visibility === 'all') return true;
+  return Array.isArray(data.selectedUserIds) && data.selectedUserIds.includes(game.user?.id);
+}
+
+function getMapRecords() {
+  const latestById = new Map();
+  for (const document of game.messages.contents.filter(isMapRecord)) {
+    const data = getMapData(document);
+    if (!data?.id || !isMapVisibleToCurrentUser(data)) continue;
+    const current = latestById.get(data.id);
+    if (!current || Number(data.updatedAt || 0) >= Number(current.data.updatedAt || 0)) {
+      latestById.set(data.id, { document, data });
+    }
+  }
+  return [...latestById.values()]
+    .sort((a, b) => Number(a.data.sortIndex || 0) - Number(b.data.sortIndex || 0) || Number(a.data.createdAt || 0) - Number(b.data.createdAt || 0));
+}
+
+function getMapById(id) {
+  return getMapRecords().find((record) => record.data.id === id) ?? null;
+}
+
+function getCurrentMapRecord() {
+  const records = getMapRecords();
+  if (!records.length) {
+    state.selectedMapId = null;
+    return null;
+  }
+  let record = state.selectedMapId ? records.find((entry) => entry.data.id === state.selectedMapId) : null;
+  if (!record) {
+    record = records[0];
+    state.selectedMapId = record.data.id;
+  }
+  return record;
+}
+
+function resetMapDraft(data = null) {
+  const records = game.user?.isGM ? getMapRecords() : [];
+  const nextSort = records.length ? Math.max(...records.map((record) => Number(record.data.sortIndex || 0))) + 1 : 0;
+  state.mapEditorDraft = {
+    id: data?.id || null,
+    name: data?.name || '',
+    image: data?.image || '',
+    visibility: data?.visibility === 'selected' ? 'selected' : 'all',
+    selectedUserIds: new Set(Array.isArray(data?.selectedUserIds) ? data.selectedUserIds : []),
+    markers: Array.isArray(data?.markers) ? data.markers.map((marker) => ({
+      id: marker.id || makeId(),
+      sourceType: marker.sourceType === 'npc' ? 'npc' : 'user',
+      sourceId: marker.sourceId || '',
+      sourceName: marker.sourceName || '',
+      sourceAvatar: marker.sourceAvatar || 'icons/svg/mystery-man.svg',
+      label: marker.label || '',
+      x: clampMapPercent(marker.x, 50),
+      y: clampMapPercent(marker.y, 50)
+    })) : [],
+    createdAt: data?.createdAt || null,
+    sortIndex: Number.isFinite(Number(data?.sortIndex)) ? Number(data.sortIndex) : nextSort
+  };
+}
+
+function clampMapPercent(value, fallback = 50) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(98, Math.max(2, number));
+}
+
+function getMapMarkerSources() {
+  const assignedActorIds = new Set(game.users.contents.map((user) => user.character?.id).filter(Boolean));
+  const users = game.users.contents
+    .filter((user) => !user.isGM)
+    .map((user) => ({
+      key: `user:${user.id}`,
+      type: 'user',
+      id: user.id,
+      name: getUserDisplayName(user),
+      avatar: getUserAvatar(user),
+      detail: user.character ? 'Player Character' : 'Player User'
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const npcs = game.actors.contents
+    .filter((actor) => !assignedActorIds.has(actor.id))
+    .map((actor) => ({
+      key: `npc:${actor.id}`,
+      type: 'npc',
+      id: actor.id,
+      name: actor.name || 'NPC',
+      avatar: getActorAvatar(actor),
+      detail: 'NPC Actor'
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { users, npcs, all: [...users, ...npcs] };
+}
+
+function getMapMarkerPresentation(marker) {
+  if (marker.sourceType === 'npc') {
+    const actor = game.actors.get(marker.sourceId);
+    return {
+      name: actor?.name || marker.sourceName || 'NPC',
+      avatar: actor ? getActorAvatar(actor) : (marker.sourceAvatar || 'icons/svg/mystery-man.svg')
+    };
+  }
+  const user = game.users.get(marker.sourceId);
+  return {
+    name: user ? getUserDisplayName(user) : (marker.sourceName || 'Player'),
+    avatar: user ? getUserAvatar(user) : (marker.sourceAvatar || 'icons/svg/mystery-man.svg')
+  };
+}
+
+function getMapAudienceLabel(data) {
+  if (data.visibility !== 'selected') return 'All Players';
+  const names = (data.selectedUserIds || []).map((id) => getUserDisplayName(game.users.get(id))).filter(Boolean);
+  if (!names.length) return 'Selected Players';
+  if (names.length <= 2) return names.join(', ');
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+}
+
+function renderMapsView() {
+  const container = state.root.querySelector('.fc-maps-content');
+  if (!container) return;
+  container.replaceChildren();
+  if (state.mapEditorOpen) {
+    renderMapEditor(container);
+    return;
+  }
+  if (state.mapManagerOpen) {
+    renderMapManager(container);
+    return;
+  }
+  renderMapViewer(container);
+}
+
+function renderMapViewer(container) {
+  const records = getMapRecords();
+
+  if (game.user?.isGM) {
+    const manage = document.createElement('button');
+    manage.type = 'button';
+    manage.className = 'fc-manager-button fc-map-manage-button';
+    manage.innerHTML = '<i class="fa-solid fa-sliders"></i><span>Manage Maps</span>';
+    manage.addEventListener('click', () => {
+      state.mapManagerOpen = true;
+      state.mapExpanded = false;
+      renderPhone();
+    });
+    container.appendChild(manage);
+  }
+
+  if (!records.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-map-empty';
+    empty.innerHTML = `<i class="fa-regular fa-map"></i><strong>No maps available</strong><span>${game.user?.isGM ? 'Use Manage Maps to create the first reference map.' : 'The GM has not shared any maps with you yet.'}</span>`;
+    container.appendChild(empty);
+    return;
+  }
+
+  const current = getCurrentMapRecord();
+  const index = Math.max(0, records.findIndex((record) => record.data.id === current.data.id));
+
+  const nav = document.createElement('div');
+  nav.className = 'fc-map-nav';
+  const previous = document.createElement('button');
+  previous.type = 'button';
+  previous.className = 'fc-map-nav-button';
+  previous.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
+  previous.title = 'Previous map';
+  previous.disabled = records.length < 2;
+  previous.addEventListener('click', () => {
+    state.selectedMapId = records[(index - 1 + records.length) % records.length].data.id;
+    state.mapExpanded = false;
+    renderPhone();
+  });
+
+  const identity = document.createElement('div');
+  identity.className = 'fc-map-nav-identity';
+  const name = document.createElement('strong');
+  name.textContent = current.data.name || 'Map';
+  const count = document.createElement('span');
+  count.textContent = `${index + 1} of ${records.length}`;
+  identity.append(name, count);
+
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.className = 'fc-map-nav-button';
+  next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+  next.title = 'Next map';
+  next.disabled = records.length < 2;
+  next.addEventListener('click', () => {
+    state.selectedMapId = records[(index + 1) % records.length].data.id;
+    state.mapExpanded = false;
+    renderPhone();
+  });
+  nav.append(previous, identity, next);
+  container.appendChild(nav);
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'fc-map-view-toolbar';
+  const audience = document.createElement('span');
+  audience.innerHTML = `<i class="fa-solid ${current.data.visibility === 'selected' ? 'fa-lock' : 'fa-users'}"></i> ${escapeMissionText(getMapAudienceLabel(current.data))}`;
+  const expand = document.createElement('button');
+  expand.type = 'button';
+  expand.className = 'fc-map-expand';
+  expand.innerHTML = state.mapExpanded ? '<i class="fa-solid fa-compress"></i> Fit' : '<i class="fa-solid fa-expand"></i> Enlarge';
+  expand.addEventListener('click', () => {
+    state.mapExpanded = !state.mapExpanded;
+    renderPhone();
+  });
+  toolbar.append(audience, expand);
+  container.appendChild(toolbar);
+
+  const viewport = document.createElement('div');
+  viewport.className = `fc-map-viewport${state.mapExpanded ? ' is-expanded' : ''}`;
+  const canvas = buildMapCanvas(current.data, { editable: false });
+  if (!state.mapExpanded) {
+    canvas.classList.add('is-tappable');
+    canvas.title = 'Click to enlarge map';
+    canvas.addEventListener('click', () => {
+      state.mapExpanded = true;
+      renderPhone();
+    });
+  }
+  viewport.appendChild(canvas);
+  container.appendChild(viewport);
+
+  const hint = document.createElement('div');
+  hint.className = 'fc-map-view-hint';
+  hint.innerHTML = state.mapExpanded
+    ? '<i class="fa-solid fa-hand"></i><span>Scroll the enlarged map to inspect it.</span>'
+    : '<i class="fa-solid fa-location-dot"></i><span>Markers are reference locations only and do not move Foundry tokens.</span>';
+  container.appendChild(hint);
+}
+
+function buildMapCanvas(data, { editable = false } = {}) {
+  const canvas = document.createElement('div');
+  canvas.className = `fc-map-canvas${editable ? ' is-editable' : ''}`;
+
+  if (String(data.image || '').trim()) {
+    canvas.classList.add('has-image');
+    const image = document.createElement('img');
+    image.className = 'fc-map-background';
+    image.src = data.image;
+    image.alt = data.name ? `${data.name} map` : 'Map';
+    image.draggable = false;
+    canvas.appendChild(image);
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'fc-map-background-placeholder';
+    placeholder.innerHTML = '<i class="fa-regular fa-image"></i><span>Choose a map image</span>';
+    canvas.appendChild(placeholder);
+  }
+
+  for (const marker of data.markers || []) {
+    const presentation = getMapMarkerPresentation(marker);
+    const pin = document.createElement(editable ? 'button' : 'div');
+    if (editable) pin.type = 'button';
+    pin.className = `fc-map-marker${editable ? ' is-draggable' : ''}`;
+    pin.style.left = `${clampMapPercent(marker.x)}%`;
+    pin.style.top = `${clampMapPercent(marker.y)}%`;
+    pin.dataset.markerId = marker.id;
+    pin.title = editable ? `Drag ${marker.label || presentation.name}` : (marker.label || presentation.name);
+
+    const avatar = document.createElement('img');
+    avatar.src = presentation.avatar || 'icons/svg/mystery-man.svg';
+    avatar.alt = '';
+    const label = document.createElement('span');
+    label.textContent = marker.label || presentation.name;
+    pin.append(avatar, label);
+
+    if (editable) pin.addEventListener('pointerdown', (event) => beginMapMarkerDrag(event, marker.id, canvas, pin));
+    canvas.appendChild(pin);
+  }
+  return canvas;
+}
+
+function beginMapMarkerDrag(event, markerId, canvas, pin) {
+  if (!game.user?.isGM || event.button > 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const marker = state.mapEditorDraft.markers.find((entry) => entry.id === markerId);
+  if (!marker) return;
+  pin.classList.add('is-dragging');
+  pin.setPointerCapture?.(event.pointerId);
+
+  const update = (clientX, clientY) => {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    marker.x = clampMapPercent(((clientX - rect.left) / rect.width) * 100);
+    marker.y = clampMapPercent(((clientY - rect.top) / rect.height) * 100);
+    pin.style.left = `${marker.x}%`;
+    pin.style.top = `${marker.y}%`;
+  };
+  update(event.clientX, event.clientY);
+
+  const move = (moveEvent) => {
+    moveEvent.preventDefault();
+    update(moveEvent.clientX, moveEvent.clientY);
+  };
+  const end = () => {
+    pin.classList.remove('is-dragging');
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+  };
+  window.addEventListener('pointermove', move, { passive: false });
+  window.addEventListener('pointerup', end, { once: true });
+  window.addEventListener('pointercancel', end, { once: true });
+}
+
+function renderMapManager(container) {
+  if (!game.user?.isGM) {
+    state.mapManagerOpen = false;
+    renderPhone();
+    return;
+  }
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'fc-manager-button fc-map-add';
+  add.innerHTML = '<i class="fa-solid fa-plus"></i><span>New Map</span>';
+  add.addEventListener('click', () => {
+    state.selectedMapId = null;
+    resetMapDraft();
+    state.mapEditorOpen = true;
+    renderPhone();
+  });
+  container.appendChild(add);
+
+  const helper = document.createElement('div');
+  helper.className = 'fc-map-manager-help';
+  helper.innerHTML = '<i class="fa-solid fa-circle-info"></i><span>Maps are reference images only. Drag character markers to show approximate party locations.</span>';
+  container.appendChild(helper);
+
+  const records = getMapRecords();
+  if (!records.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-map-empty';
+    empty.innerHTML = '<i class="fa-regular fa-map"></i><strong>No maps configured</strong><span>Create a map and choose an image to begin.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  records.forEach((record, index) => {
+    const row = document.createElement('div');
+    row.className = 'fc-map-manager-row';
+    const thumb = document.createElement('div');
+    thumb.className = 'fc-map-manager-thumb';
+    if (record.data.image) thumb.style.backgroundImage = `url("${String(record.data.image).replace(/"/g, '%22')}")`;
+    else thumb.innerHTML = '<i class="fa-regular fa-map"></i>';
+
+    const text = document.createElement('div');
+    text.className = 'fc-map-manager-copy';
+    const title = document.createElement('strong');
+    title.textContent = record.data.name || 'Untitled Map';
+    const detail = document.createElement('span');
+    detail.textContent = `${getMapAudienceLabel(record.data)} • ${(record.data.markers || []).length} marker${(record.data.markers || []).length === 1 ? '' : 's'}`;
+    text.append(title, detail);
+
+    const actions = document.createElement('div');
+    actions.className = 'fc-map-manager-row-actions';
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.title = 'Move map up';
+    up.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+    up.disabled = index === 0;
+    up.addEventListener('click', () => moveMapRecord(record.data.id, -1));
+    const down = document.createElement('button');
+    down.type = 'button';
+    down.title = 'Move map down';
+    down.innerHTML = '<i class="fa-solid fa-arrow-down"></i>';
+    down.disabled = index === records.length - 1;
+    down.addEventListener('click', () => moveMapRecord(record.data.id, 1));
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.title = 'Edit map';
+    edit.innerHTML = '<i class="fa-solid fa-pen"></i>';
+    edit.addEventListener('click', () => {
+      state.selectedMapId = record.data.id;
+      resetMapDraft(record.data);
+      state.mapEditorOpen = true;
+      renderPhone();
+    });
+    actions.append(up, down, edit);
+    row.append(thumb, text, actions);
+    container.appendChild(row);
+  });
+}
+
+async function moveMapRecord(mapId, delta) {
+  if (!game.user?.isGM) return;
+  const records = getMapRecords();
+  const index = records.findIndex((record) => record.data.id === mapId);
+  const target = index + Number(delta || 0);
+  if (index < 0 || target < 0 || target >= records.length) return;
+  const next = [...records];
+  [next[index], next[target]] = [next[target], next[index]];
+  try {
+    for (let sortIndex = 0; sortIndex < next.length; sortIndex++) {
+      const record = next[sortIndex];
+      if (Number(record.data.sortIndex || 0) === sortIndex) continue;
+      const updated = { ...record.data, sortIndex, updatedAt: Date.now() };
+      await record.document.update({ [`flags.${MODULE_ID}.${MAP_FLAG}`]: updated });
+    }
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to reorder Maps`, error);
+    ui.notifications.error('Map order could not be saved.');
+  }
+}
+
+function renderMapEditor(container) {
+  if (!game.user?.isGM) {
+    state.mapEditorOpen = false;
+    state.mapManagerOpen = false;
+    resetMapDraft();
+    renderPhone();
+    return;
+  }
+
+  const draft = state.mapEditorDraft;
+  const form = document.createElement('form');
+  form.className = 'fc-map-editor';
+
+  const makeField = (text, input) => {
+    const label = document.createElement('label');
+    label.className = 'fc-map-field';
+    const title = document.createElement('span');
+    title.textContent = text;
+    label.append(title, input);
+    return label;
+  };
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.maxLength = 80;
+  nameInput.placeholder = 'New York City';
+  nameInput.value = draft.name;
+  nameInput.addEventListener('input', () => { draft.name = nameInput.value; });
+  form.appendChild(makeField('Map name', nameInput));
+
+  const imageWrap = document.createElement('div');
+  imageWrap.className = 'fc-map-image-row';
+  const imageInput = document.createElement('input');
+  imageInput.type = 'text';
+  imageInput.placeholder = 'path/to/map.webp';
+  imageInput.value = draft.image;
+  imageInput.addEventListener('input', () => { draft.image = imageInput.value.trim(); });
+  const browse = document.createElement('button');
+  browse.type = 'button';
+  browse.className = 'fc-map-browse';
+  browse.innerHTML = '<i class="fa-solid fa-folder-open"></i><span>Browse</span>';
+  imageWrap.append(imageInput, browse);
+  const imageField = document.createElement('label');
+  imageField.className = 'fc-map-field';
+  const imageTitle = document.createElement('span');
+  imageTitle.textContent = 'Background image';
+  imageField.append(imageTitle, imageWrap);
+  form.appendChild(imageField);
+
+  const visibility = document.createElement('select');
+  for (const [value, text] of [['all', 'All Players'], ['selected', 'Selected Players']]) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = text;
+    option.selected = draft.visibility === value;
+    visibility.appendChild(option);
+  }
+  form.appendChild(makeField('Visible to', visibility));
+
+  const playerChoices = document.createElement('div');
+  playerChoices.className = 'fc-map-player-choices';
+  const drawPlayerChoices = () => {
+    playerChoices.replaceChildren();
+    playerChoices.hidden = draft.visibility !== 'selected';
+    if (playerChoices.hidden) return;
+    const users = game.users.contents.filter((user) => !user.isGM).sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b)));
+    if (!users.length) {
+      const none = document.createElement('div');
+      none.className = 'fc-map-no-players';
+      none.textContent = 'No player users are available.';
+      playerChoices.appendChild(none);
+      return;
+    }
+    for (const user of users) {
+      const label = document.createElement('label');
+      label.className = 'fc-map-player-choice';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = draft.selectedUserIds.has(user.id);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) draft.selectedUserIds.add(user.id);
+        else draft.selectedUserIds.delete(user.id);
+      });
+      const avatar = document.createElement('img');
+      avatar.src = getUserAvatar(user);
+      avatar.alt = '';
+      const span = document.createElement('span');
+      span.textContent = getUserDisplayName(user);
+      label.append(checkbox, avatar, span);
+      playerChoices.appendChild(label);
+    }
+  };
+  visibility.addEventListener('change', () => {
+    draft.visibility = visibility.value === 'selected' ? 'selected' : 'all';
+    drawPlayerChoices();
+  });
+  drawPlayerChoices();
+  form.appendChild(playerChoices);
+
+  const editorTitle = document.createElement('div');
+  editorTitle.className = 'fc-map-editor-section-title';
+  editorTitle.textContent = 'Marker placement';
+  form.appendChild(editorTitle);
+
+  const editorHint = document.createElement('div');
+  editorHint.className = 'fc-map-editor-hint';
+  editorHint.innerHTML = '<i class="fa-solid fa-arrows-up-down-left-right"></i><span>Add a character, then drag their marker directly on the map.</span>';
+  form.appendChild(editorHint);
+
+  const canvasHolder = document.createElement('div');
+  canvasHolder.className = 'fc-map-editor-canvas-holder';
+  form.appendChild(canvasHolder);
+
+  const sourceRow = document.createElement('div');
+  sourceRow.className = 'fc-map-source-row';
+  const sourceSelect = document.createElement('select');
+  const sources = getMapMarkerSources();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Choose character…';
+  sourceSelect.appendChild(placeholder);
+  if (sources.users.length) {
+    const group = document.createElement('optgroup');
+    group.label = 'Players';
+    for (const source of sources.users) {
+      const option = document.createElement('option');
+      option.value = source.key;
+      option.textContent = source.name;
+      group.appendChild(option);
+    }
+    sourceSelect.appendChild(group);
+  }
+  if (sources.npcs.length) {
+    const group = document.createElement('optgroup');
+    group.label = 'NPC Actors';
+    for (const source of sources.npcs) {
+      const option = document.createElement('option');
+      option.value = source.key;
+      option.textContent = source.name;
+      group.appendChild(option);
+    }
+    sourceSelect.appendChild(group);
+  }
+  const addMarker = document.createElement('button');
+  addMarker.type = 'button';
+  addMarker.className = 'fc-map-add-marker';
+  addMarker.innerHTML = '<i class="fa-solid fa-location-dot"></i><span>Add</span>';
+  sourceRow.append(sourceSelect, addMarker);
+  form.appendChild(sourceRow);
+
+  const markerList = document.createElement('div');
+  markerList.className = 'fc-map-marker-list';
+  form.appendChild(markerList);
+
+  const drawEditor = () => {
+    draft.image = imageInput.value.trim();
+    canvasHolder.replaceChildren(buildMapCanvas(draft, { editable: true }));
+    markerList.replaceChildren();
+    if (!draft.markers.length) {
+      const none = document.createElement('div');
+      none.className = 'fc-map-marker-empty';
+      none.textContent = 'No character markers on this map yet.';
+      markerList.appendChild(none);
+      return;
+    }
+    for (const marker of draft.markers) {
+      const presentation = getMapMarkerPresentation(marker);
+      const row = document.createElement('div');
+      row.className = 'fc-map-marker-editor-row';
+      const avatar = document.createElement('img');
+      avatar.src = presentation.avatar;
+      avatar.alt = '';
+      const copy = document.createElement('div');
+      copy.className = 'fc-map-marker-editor-copy';
+      const strong = document.createElement('strong');
+      strong.textContent = presentation.name;
+      const label = document.createElement('input');
+      label.type = 'text';
+      label.maxLength = 40;
+      label.placeholder = 'Custom label (optional)';
+      label.value = marker.label || '';
+      label.addEventListener('input', () => {
+        marker.label = label.value;
+        const pin = [...canvasHolder.querySelectorAll('[data-marker-id]')].find((element) => element.dataset.markerId === marker.id);
+        const pinLabel = pin?.querySelector('span');
+        if (pinLabel) pinLabel.textContent = marker.label || presentation.name;
+      });
+      copy.append(strong, label);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'fc-map-remove-marker';
+      remove.title = 'Remove marker';
+      remove.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      remove.addEventListener('click', () => {
+        draft.markers = draft.markers.filter((entry) => entry.id !== marker.id);
+        drawEditor();
+      });
+      row.append(avatar, copy, remove);
+      markerList.appendChild(row);
+    }
+  };
+
+  imageInput.addEventListener('change', drawEditor);
+  browse.addEventListener('click', () => {
+    openMapImagePicker(imageInput.value.trim(), (path) => {
+      imageInput.value = path || '';
+      draft.image = imageInput.value.trim();
+      drawEditor();
+    });
+  });
+  addMarker.addEventListener('click', () => {
+    const source = sources.all.find((entry) => entry.key === sourceSelect.value);
+    if (!source) {
+      ui.notifications.warn('Choose a character to add to the map.');
+      return;
+    }
+    if (draft.markers.some((marker) => marker.sourceType === source.type && marker.sourceId === source.id)) {
+      ui.notifications.warn(`${source.name} is already on this map.`);
+      return;
+    }
+    const offset = (draft.markers.length % 5) * 5;
+    draft.markers.push({
+      id: makeId(),
+      sourceType: source.type,
+      sourceId: source.id,
+      sourceName: source.name,
+      sourceAvatar: source.avatar,
+      label: '',
+      x: clampMapPercent(50 + offset),
+      y: clampMapPercent(50 + offset)
+    });
+    sourceSelect.value = '';
+    drawEditor();
+  });
+  drawEditor();
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'fc-create-group-button fc-map-save';
+  save.innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>Save Map</span>';
+  form.appendChild(save);
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    draft.name = nameInput.value.trim();
+    draft.image = imageInput.value.trim();
+    draft.visibility = visibility.value === 'selected' ? 'selected' : 'all';
+    save.disabled = true;
+    try {
+      await saveMapDraft();
+    } finally {
+      save.disabled = false;
+    }
+  });
+  container.appendChild(form);
+
+  if (state.selectedMapId) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'fc-manager-button fc-map-delete';
+    del.innerHTML = '<i class="fa-solid fa-trash"></i><span>Delete Map</span>';
+    del.addEventListener('click', () => deleteSelectedMap());
+    container.appendChild(del);
+  }
+
+  requestAnimationFrame(() => nameInput.focus());
+}
+
+function openMapImagePicker(current, callback) {
+  const FilePickerClass = globalThis.foundry?.applications?.apps?.FilePicker ?? globalThis.FilePicker;
+  if (!FilePickerClass) {
+    ui.notifications.warn('Foundry file picker is unavailable. Enter the image path manually.');
+    return;
+  }
+  try {
+    const picker = new FilePickerClass({
+      type: 'image',
+      current: current || '',
+      callback: (path) => callback?.(path)
+    });
+    picker.render(true);
+  } catch (error) {
+    console.error(`${MODULE_ID} | Could not open map image picker`, error);
+    ui.notifications.warn('Could not open the image picker. Enter the image path manually.');
+  }
+}
+
+async function saveMapDraft() {
+  if (!game.user?.isGM) return;
+  const draft = state.mapEditorDraft;
+  const name = String(draft.name || '').trim();
+  const image = String(draft.image || '').trim();
+  if (!name) {
+    ui.notifications.warn('Enter a map name.');
+    return;
+  }
+  if (!image) {
+    ui.notifications.warn('Choose a background image for the map.');
+    return;
+  }
+  const selectedUserIds = [...draft.selectedUserIds].filter((id) => game.users.get(id) && !game.users.get(id).isGM);
+  if (draft.visibility === 'selected' && !selectedUserIds.length) {
+    ui.notifications.warn('Select at least one player for a restricted map.');
+    return;
+  }
+
+  const existing = state.selectedMapId ? getMapById(state.selectedMapId) : null;
+  const now = Date.now();
+  const data = {
+    schema: 1,
+    id: existing?.data?.id || draft.id || makeId(),
+    name: name.slice(0, 80),
+    image,
+    visibility: draft.visibility === 'selected' ? 'selected' : 'all',
+    selectedUserIds: draft.visibility === 'selected' ? selectedUserIds : [],
+    markers: draft.markers.map((marker) => ({
+      id: marker.id || makeId(),
+      sourceType: marker.sourceType === 'npc' ? 'npc' : 'user',
+      sourceId: marker.sourceId,
+      sourceName: marker.sourceName || '',
+      sourceAvatar: marker.sourceAvatar || 'icons/svg/mystery-man.svg',
+      label: String(marker.label || '').trim().slice(0, 40),
+      x: clampMapPercent(marker.x),
+      y: clampMapPercent(marker.y)
+    })),
+    sortIndex: existing ? Number(existing.data.sortIndex || 0) : Number(draft.sortIndex || 0),
+    createdAt: existing?.data?.createdAt || draft.createdAt || now,
+    updatedAt: now,
+    createdByUserId: existing?.data?.createdByUserId || game.user.id,
+    updatedByUserId: game.user.id
+  };
+  const whisper = data.visibility === 'selected' ? uniqueIds([...data.selectedUserIds, ...getGmUserIds()]) : [];
+
+  try {
+    const document = await createChatMessageDocument({
+      content: `[Maps] ${formatSafeChatContent(data.name)}`,
+      speaker: { alias: 'Maps' },
+      whisper,
+      flags: { [MODULE_ID]: { [MAP_FLAG]: data } }
+    });
+    if (existing) await existing.document.delete();
+    state.selectedMapId = data.id;
+    state.mapEditorOpen = false;
+    state.mapManagerOpen = false;
+    state.mapExpanded = false;
+    resetMapDraft();
+    ui.notifications.info(existing ? 'Map updated.' : 'Map added.');
+    renderPhone();
+    return document;
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to save map`, error);
+    ui.notifications.error('The map could not be saved. Check the console for details.');
+  }
+}
+
+async function deleteSelectedMap() {
+  if (!game.user?.isGM || !state.selectedMapId) return;
+  const record = getMapById(state.selectedMapId);
+  if (!record) return;
+  const confirmed = window.confirm(`Delete "${record.data.name || 'Untitled Map'}" from the Maps app?`);
+  if (!confirmed) return;
+  try {
+    await record.document.delete();
+    state.selectedMapId = null;
+    state.mapEditorOpen = false;
+    state.mapManagerOpen = true;
+    state.mapExpanded = false;
+    resetMapDraft();
+    ui.notifications.info('Map deleted.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to delete map`, error);
+    ui.notifications.error('The map could not be deleted. Check the console for details.');
+  }
+}
 
 // ---------------------------
 // Arcade app: Snake + Tic Tac Toe
