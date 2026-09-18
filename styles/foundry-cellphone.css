@@ -2169,3 +2169,464 @@
   color: #c8beff;
   text-decoration: underline;
 }
+
+/* v1.4.0 Browser app */
+.fc-app-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 220px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.fc-app-symbol-browser {
+  background: linear-gradient(145deg, #2f9fbd, #1d5f86);
+}
+
+.fc-browser-view[hidden] {
+  display: none !important;
+}
+
+.fc-browser-view {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 9px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.18) transparent;
+}
+
+.fc-browser-content,
+.fc-browser-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.fc-browser-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 8px 0 2px;
+  color: rgba(255,255,255,.94);
+}
+
+.fc-browser-brand strong {
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: -.02em;
+}
+
+.fc-browser-brand-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #2f9fbd, #1d5f86);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 5px 14px rgba(0,0,0,.25);
+  font-size: 16px;
+}
+
+.fc-browser-search {
+  display: grid;
+  grid-template-columns: 24px minmax(0,1fr) 30px;
+  align-items: center;
+  gap: 4px;
+  min-height: 42px;
+  padding: 0 6px 0 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 13px;
+  background: rgba(255,255,255,.075);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.fc-browser-search > i {
+  color: rgba(255,255,255,.50);
+  font-size: 12px;
+}
+
+.fc-browser-search input,
+.fc-browser-manager-row input,
+.fc-browser-manager-row select {
+  min-width: 0;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+}
+
+.fc-browser-search input {
+  height: 38px;
+  padding: 0 2px;
+  font-size: 11px;
+}
+
+.fc-browser-search input::placeholder,
+.fc-browser-manager-row input::placeholder {
+  color: rgba(255,255,255,.38);
+}
+
+.fc-browser-search button,
+.fc-browser-manage,
+.fc-browser-clear,
+.fc-browser-shortcut,
+.fc-browser-result,
+.fc-browser-manager-add,
+.fc-browser-manager-remove,
+.fc-browser-manager-save,
+.fc-browser-manager-cancel {
+  border: 0;
+  box-shadow: none;
+  font-family: inherit;
+}
+
+.fc-browser-search button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(47,159,189,.20);
+  color: #75d8ef;
+  cursor: pointer;
+}
+
+.fc-browser-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 27px;
+  padding: 0 2px;
+  color: rgba(255,255,255,.58);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.fc-browser-manage,
+.fc-browser-clear {
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.78);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fc-browser-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 14px 8px;
+  padding: 4px 0 10px;
+}
+
+.fc-browser-shortcut {
+  min-width: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.fc-browser-shortcut-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255,255,255,.92);
+  color: #26364a;
+  box-shadow: 0 6px 14px rgba(0,0,0,.24);
+  font-size: 20px;
+}
+
+.fc-browser-shortcut:hover .fc-browser-shortcut-icon {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.fc-browser-shortcut-label {
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255,255,255,.82);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.fc-browser-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fc-browser-result {
+  width: 100%;
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 34px minmax(0,1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 9px;
+  border-radius: 11px;
+  background: rgba(255,255,255,.065);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fc-browser-result:hover {
+  background: rgba(255,255,255,.10);
+}
+
+.fc-browser-result-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(47,159,189,.16);
+  color: #70d4ea;
+}
+
+.fc-browser-result-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fc-browser-result-body strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.fc-browser-result-body small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255,255,255,.45);
+  font-size: 8px;
+}
+
+.fc-browser-result-snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-top: 2px;
+  color: rgba(255,255,255,.68);
+  font-size: 9px;
+  line-height: 1.28;
+}
+
+.fc-browser-empty {
+  min-height: 145px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 18px;
+  border: 1px dashed rgba(255,255,255,.10);
+  border-radius: 14px;
+  color: rgba(255,255,255,.55);
+  text-align: center;
+}
+
+.fc-browser-empty > i {
+  font-size: 24px;
+  color: rgba(112,212,234,.72);
+}
+
+.fc-browser-empty strong {
+  color: rgba(255,255,255,.82);
+  font-size: 11px;
+}
+
+.fc-browser-empty span {
+  max-width: 210px;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.fc-browser-journal {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-browser-journal-heading {
+  padding: 5px 4px 9px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.fc-browser-journal-heading > span {
+  display: block;
+  margin-bottom: 3px;
+  color: #70d4ea;
+  font-size: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.fc-browser-journal-heading h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.fc-browser-journal-body {
+  overflow-wrap: anywhere;
+  color: rgba(255,255,255,.86);
+  font-size: 10px;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.fc-browser-journal-body h1,
+.fc-browser-journal-body h2,
+.fc-browser-journal-body h3,
+.fc-browser-journal-body h4 {
+  color: #fff;
+}
+
+.fc-browser-journal-body h1 { font-size: 17px; }
+.fc-browser-journal-body h2 { font-size: 15px; }
+.fc-browser-journal-body h3 { font-size: 13px; }
+.fc-browser-journal-body h4 { font-size: 11px; }
+
+.fc-browser-journal-body a {
+  color: #75d8ef;
+  text-decoration: underline;
+}
+
+.fc-browser-journal-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.fc-browser-journal-body table {
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+
+.fc-browser-loading,
+.fc-browser-note-empty {
+  color: rgba(255,255,255,.55);
+  font-size: 9px;
+}
+
+.fc-browser-manager-help {
+  padding: 10px;
+  border-radius: 11px;
+  background: rgba(47,159,189,.09);
+  color: rgba(255,255,255,.68);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.fc-browser-manager,
+.fc-browser-manager-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-browser-manager-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px;
+  border-radius: 11px;
+  background: rgba(255,255,255,.06);
+}
+
+.fc-browser-manager-row input,
+.fc-browser-manager-row select {
+  width: 100%;
+  height: 31px;
+  padding: 0 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 8px;
+  background: rgba(0,0,0,.15);
+  font-size: 9px;
+}
+
+.fc-browser-manager-row select option {
+  color: #111;
+}
+
+.fc-browser-manager-row-lower {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 34px;
+  gap: 6px;
+}
+
+.fc-browser-manager-remove {
+  height: 31px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(223,59,55,.10);
+  color: #ffaaa7;
+  cursor: pointer;
+}
+
+.fc-browser-manager-add {
+  min-height: 34px;
+  border-radius: 9px;
+  background: rgba(47,159,189,.12);
+  color: #7bdcef;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.fc-browser-manager-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.fc-browser-manager-save,
+.fc-browser-manager-cancel {
+  min-height: 34px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.fc-browser-manager-save {
+  background: #2f9fbd;
+  color: #fff;
+}
+
+.fc-browser-manager-cancel {
+  background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.78);
+}

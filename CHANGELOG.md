@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.0
+
+- Added the **Browser** app to the cellphone Home Screen.
+- Added a generic faux-browser start page with search and shortcut tiles.
+- Added GM-only Browser shortcut management.
+- Shortcut tiles support a name, HTTP/HTTPS URL, and generic icon.
+- Clicking a shortcut opens the configured real-world URL in a new browser tab.
+- Added permission-aware Foundry Journal search inside the Browser app.
+- Journal search indexes entry names, page names, and visible text from Journal pages the current user may observe.
+- Journal search results open and render inside the cellphone interface.
+- Secret Journal sections are excluded from search indexing for non-owners.
+- Browser navigation preserves search results when opening and backing out of a Journal page.
+- Changed the Home Screen app grid to a balanced 2x2 layout for Messages, Mission Log, Friendpage, and Browser.
+- Existing messaging, calls, Mission Log, Friendpage, NPC roleplay, and history remain unchanged.
+
 ## 1.3.2
 
 - Added GM-managed **active Friendpage profiles**.

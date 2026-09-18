@@ -5,6 +5,7 @@ const FRIENDPAGE_FLAG = "friendpageRecord";
 const NPC_CONTACTS_SETTING = "npcContacts";
 const MISSION_SEEN_SETTING = "missionSeen";
 const FRIENDPAGE_PROFILES_SETTING = "friendpageProfiles";
+const BROWSER_BOOKMARKS_SETTING = "browserBookmarks";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -35,6 +36,10 @@ const state = {
   selectedFriendProfileKey: null,
   friendpageActingKey: null,
   friendpageProfileManagerOpen: false,
+  browserQuery: "",
+  browserSearchResults: [],
+  selectedBrowserPage: null,
+  browserBookmarkManagerOpen: false,
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -90,6 +95,19 @@ Hooks.once("init", () => {
       state.selectedFriendProfileKey = null;
       state.friendpageProfileManagerOpen = false;
       validateFriendpageActingIdentity();
+      refreshAll();
+    }
+  });
+
+  game.settings.register(MODULE_ID, BROWSER_BOOKMARKS_SETTING, {
+    name: "Browser Shortcuts",
+    hint: "GM-configured external web shortcuts shown in the cellphone Browser app.",
+    scope: "world",
+    config: false,
+    type: Array,
+    default: [],
+    onChange: () => {
+      state.browserBookmarkManagerOpen = false;
       refreshAll();
     }
   });
@@ -238,6 +256,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-friendpage"><i class="fa-solid fa-user-group"></i></span>
               <span class="fc-app-label">Friendpage</span>
             </button>
+            <button class="fc-app-icon" type="button" data-app="browser">
+              <span class="fc-app-symbol fc-app-symbol-browser"><i class="fa-solid fa-compass"></i></span>
+              <span class="fc-app-label">Browser</span>
+            </button>
           </div>
         </section>
 
@@ -311,6 +333,10 @@ function buildPhone() {
           <section class="fc-friendpage-view" hidden>
             <div class="fc-friendpage-content"></div>
           </section>
+
+          <section class="fc-browser-view" hidden>
+            <div class="fc-browser-content"></div>
+          </section>
         </main>
       </div>
 
@@ -378,7 +404,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -399,6 +425,11 @@ function openApp(app) {
     state.friendpageMode = 'feed';
     state.selectedFriendProfileKey = null;
     state.friendpageProfileManagerOpen = false;
+  } else if (app === 'browser') {
+    state.browserQuery = '';
+    state.browserSearchResults = [];
+    state.selectedBrowserPage = null;
+    state.browserBookmarkManagerOpen = false;
   }
   renderPhone();
 }
@@ -412,6 +443,10 @@ function goHome() {
   state.friendpageMode = 'feed';
   state.selectedFriendProfileKey = null;
   state.friendpageProfileManagerOpen = false;
+  state.browserQuery = '';
+  state.browserSearchResults = [];
+  state.selectedBrowserPage = null;
+  state.browserBookmarkManagerOpen = false;
   renderPhone();
 }
 
@@ -443,6 +478,27 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "browser") {
+    if (state.browserBookmarkManagerOpen) {
+      state.browserBookmarkManagerOpen = false;
+      renderPhone();
+      return;
+    }
+    if (state.selectedBrowserPage) {
+      state.selectedBrowserPage = null;
+      renderPhone();
+      return;
+    }
+    if (state.browserQuery) {
+      state.browserQuery = '';
+      state.browserSearchResults = [];
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.app === "friendpage") {
     if (state.friendpageProfileManagerOpen) {
@@ -813,6 +869,7 @@ function renderPhone() {
   const contactsView = state.root.querySelector(".fc-contacts-view");
   const missionView = state.root.querySelector(".fc-mission-view");
   const friendpageView = state.root.querySelector(".fc-friendpage-view");
+  const browserView = state.root.querySelector(".fc-browser-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -825,6 +882,7 @@ function renderPhone() {
   contactsView.hidden = true;
   missionView.hidden = true;
   friendpageView.hidden = true;
+  browserView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -854,6 +912,13 @@ function renderPhone() {
   if (state.app === "friendpage") {
     friendpageView.hidden = false;
     renderFriendpageView();
+    updateBadges();
+    return;
+  }
+
+  if (state.app === "browser") {
+    browserView.hidden = false;
+    renderBrowserView();
     updateBadges();
     return;
   }
@@ -908,6 +973,25 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "browser") {
+    back.hidden = false;
+    if (state.browserBookmarkManagerOpen) {
+      title.textContent = "Browser Sites";
+      subtitle.textContent = "GM shortcut configuration";
+    } else if (state.selectedBrowserPage) {
+      const page = getBrowserJournalPage(state.selectedBrowserPage);
+      title.textContent = page?.page?.name || page?.entry?.name || "Journal";
+      subtitle.textContent = page?.entry?.name && page?.page?.name !== page?.entry?.name ? page.entry.name : "Journal result";
+    } else if (state.browserQuery) {
+      title.textContent = "Browser";
+      subtitle.textContent = "Journal search results";
+    } else {
+      title.textContent = "Browser";
+      subtitle.textContent = "Search journals & open sites";
+    }
+    return;
+  }
 
   if (state.app === "friendpage") {
     back.hidden = false;
@@ -2640,6 +2724,519 @@ function formatFriendpageDate(timestamp) {
 // ---------------------------
 // Mission Log
 // ---------------------------
+
+
+// -----------------------------------------------------------------------------
+// Browser app: external shortcuts + permission-aware Journal search
+// -----------------------------------------------------------------------------
+
+const BROWSER_ICON_CHOICES = [
+  ['globe', 'Globe'],
+  ['newspaper', 'News'],
+  ['building', 'Building'],
+  ['shield-halved', 'Shield'],
+  ['book-open', 'Book'],
+  ['video', 'Video'],
+  ['comments', 'Social'],
+  ['satellite-dish', 'Signal'],
+  ['link', 'Link']
+];
+
+function getBrowserBookmarks() {
+  const raw = game.settings.get(MODULE_ID, BROWSER_BOOKMARKS_SETTING);
+  if (!Array.isArray(raw)) return [];
+  return raw.map((bookmark) => ({
+    id: String(bookmark?.id || makeBrowserBookmarkId()),
+    label: String(bookmark?.label || 'Website').slice(0, 60),
+    url: String(bookmark?.url || ''),
+    icon: sanitizeBrowserIcon(bookmark?.icon)
+  })).filter((bookmark) => bookmark.url);
+}
+
+function sanitizeBrowserIcon(icon) {
+  const allowed = new Set(BROWSER_ICON_CHOICES.map(([value]) => value));
+  return allowed.has(icon) ? icon : 'globe';
+}
+
+function makeBrowserBookmarkId() {
+  const random = globalThis.foundry?.utils?.randomID?.(10) || Math.random().toString(36).slice(2, 12);
+  return `site-${random}`;
+}
+
+function normalizeExternalUrl(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(candidate);
+    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    return url.href;
+  } catch (_) {
+    return null;
+  }
+}
+
+function openBrowserExternalUrl(url) {
+  const normalized = normalizeExternalUrl(url);
+  if (!normalized) {
+    ui.notifications.warn('That Browser shortcut does not have a valid HTTP or HTTPS URL.');
+    return;
+  }
+  window.open(normalized, '_blank', 'noopener,noreferrer');
+}
+
+function renderBrowserView() {
+  const container = state.root.querySelector('.fc-browser-content');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (state.browserBookmarkManagerOpen) {
+    renderBrowserBookmarkManager(container);
+    return;
+  }
+
+  if (state.selectedBrowserPage) {
+    void renderBrowserJournalPage(container, state.selectedBrowserPage);
+    return;
+  }
+
+  const shell = document.createElement('div');
+  shell.className = 'fc-browser-shell';
+
+  const brand = document.createElement('div');
+  brand.className = 'fc-browser-brand';
+  brand.innerHTML = '<span class="fc-browser-brand-icon"><i class="fa-solid fa-compass"></i></span><strong>Browser</strong>';
+  shell.appendChild(brand);
+
+  const searchForm = document.createElement('form');
+  searchForm.className = 'fc-browser-search';
+  searchForm.innerHTML = `
+    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+    <input type="search" maxlength="180" autocomplete="off" placeholder="Search accessible journal notes" aria-label="Search Foundry journal notes">
+    <button type="submit" aria-label="Search"><i class="fa-solid fa-arrow-right"></i></button>
+  `;
+  const input = searchForm.querySelector('input');
+  input.value = state.browserQuery || '';
+  searchForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const query = input.value.trim();
+    state.browserQuery = query;
+    state.browserSearchResults = query ? searchAccessibleJournalPages(query) : [];
+    state.selectedBrowserPage = null;
+    renderPhone();
+  });
+  shell.appendChild(searchForm);
+
+  if (state.browserQuery) {
+    renderBrowserSearchResults(shell);
+  } else {
+    renderBrowserBookmarkStart(shell);
+  }
+
+  container.appendChild(shell);
+}
+
+function renderBrowserBookmarkStart(container) {
+  const header = document.createElement('div');
+  header.className = 'fc-browser-section-heading';
+  const title = document.createElement('span');
+  title.textContent = 'Shortcuts';
+  header.appendChild(title);
+
+  if (game.user?.isGM) {
+    const manage = document.createElement('button');
+    manage.type = 'button';
+    manage.className = 'fc-browser-manage';
+    manage.innerHTML = '<i class="fa-solid fa-sliders"></i> Manage';
+    manage.addEventListener('click', () => {
+      state.browserBookmarkManagerOpen = true;
+      renderPhone();
+    });
+    header.appendChild(manage);
+  }
+  container.appendChild(header);
+
+  const bookmarks = getBrowserBookmarks();
+  if (!bookmarks.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-browser-empty';
+    empty.innerHTML = '<i class="fa-solid fa-bookmark"></i><strong>No shortcuts yet</strong><span>The GM can add websites to this Browser home page.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'fc-browser-shortcuts';
+  for (const bookmark of bookmarks) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'fc-browser-shortcut';
+    button.title = bookmark.url;
+
+    const icon = document.createElement('span');
+    icon.className = 'fc-browser-shortcut-icon';
+    icon.innerHTML = `<i class="fa-solid fa-${bookmark.icon}"></i>`;
+    const label = document.createElement('span');
+    label.className = 'fc-browser-shortcut-label';
+    label.textContent = bookmark.label;
+    button.append(icon, label);
+    button.addEventListener('click', () => openBrowserExternalUrl(bookmark.url));
+    grid.appendChild(button);
+  }
+  container.appendChild(grid);
+}
+
+function renderBrowserSearchResults(container) {
+  const heading = document.createElement('div');
+  heading.className = 'fc-browser-section-heading';
+  const count = state.browserSearchResults.length;
+  heading.innerHTML = `<span>${count} ${count === 1 ? 'result' : 'results'}</span>`;
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.className = 'fc-browser-clear';
+  clear.textContent = 'Clear';
+  clear.addEventListener('click', () => {
+    state.browserQuery = '';
+    state.browserSearchResults = [];
+    renderPhone();
+  });
+  heading.appendChild(clear);
+  container.appendChild(heading);
+
+  if (!count) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-browser-empty';
+    empty.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i><strong>No journal notes found</strong><span>Only journal pages you are allowed to observe are searched.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'fc-browser-results';
+  for (const result of state.browserSearchResults) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'fc-browser-result';
+
+    const icon = document.createElement('span');
+    icon.className = 'fc-browser-result-icon';
+    icon.innerHTML = '<i class="fa-solid fa-file-lines"></i>';
+
+    const body = document.createElement('span');
+    body.className = 'fc-browser-result-body';
+    const title = document.createElement('strong');
+    title.textContent = result.pageName || result.entryName;
+    const parent = document.createElement('small');
+    parent.textContent = result.pageName && result.pageName !== result.entryName ? result.entryName : 'Journal';
+    const snippet = document.createElement('span');
+    snippet.className = 'fc-browser-result-snippet';
+    snippet.textContent = result.snippet || 'Open journal page';
+    body.append(title, parent, snippet);
+    button.append(icon, body);
+    button.addEventListener('click', () => {
+      state.selectedBrowserPage = { entryId: result.entryId, pageId: result.pageId };
+      renderPhone();
+    });
+    list.appendChild(button);
+  }
+  container.appendChild(list);
+}
+
+function getBrowserObserverLevel() {
+  return globalThis.CONST?.DOCUMENT_OWNERSHIP_LEVELS?.OBSERVER ?? 2;
+}
+
+function canCurrentUserReadJournalDocument(document) {
+  if (!document || !game.user) return false;
+  try {
+    if (typeof document.testUserPermission === 'function') {
+      return document.testUserPermission(game.user, getBrowserObserverLevel());
+    }
+    return Boolean(document.visible ?? document.isOwner);
+  } catch (_) {
+    return false;
+  }
+}
+
+function getJournalTextContent(page) {
+  return String(page?.text?.content ?? page?.system?.text?.content ?? '');
+}
+
+function htmlToPlainText(html) {
+  const value = String(html || '');
+  if (!value) return '';
+  const div = document.createElement('div');
+  div.innerHTML = value;
+  return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+}
+
+function getJournalSearchPlainText(html, page, entry) {
+  const value = String(html || '');
+  if (!value) return '';
+  const div = document.createElement('div');
+  div.innerHTML = value;
+  if (!(page?.isOwner || entry?.isOwner)) {
+    div.querySelectorAll('.secret, section.secret, [data-secret]').forEach((node) => node.remove());
+  }
+  return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+}
+
+function searchAccessibleJournalPages(query) {
+  const normalized = String(query || '').trim().toLowerCase();
+  if (!normalized) return [];
+  const terms = normalized.split(/\s+/).filter(Boolean);
+  const results = [];
+
+  for (const entry of game.journal ?? []) {
+    if (!canCurrentUserReadJournalDocument(entry)) continue;
+    for (const page of entry.pages ?? []) {
+      if (!canCurrentUserReadJournalDocument(page)) continue;
+      const raw = getJournalTextContent(page);
+      const plain = getJournalSearchPlainText(raw, page, entry);
+      const entryName = String(entry.name || 'Journal');
+      const pageName = String(page.name || entryName);
+      const haystack = `${entryName} ${pageName} ${plain}`.toLowerCase();
+      if (!terms.every((term) => haystack.includes(term))) continue;
+
+      const firstTerm = terms[0];
+      const index = plain.toLowerCase().indexOf(firstTerm);
+      let snippet = plain;
+      if (index >= 0) snippet = plain.slice(Math.max(0, index - 60), index + 150);
+      snippet = snippet.slice(0, 220).trim();
+      if (snippet && plain.length > snippet.length) snippet += '…';
+
+      results.push({
+        entryId: entry.id,
+        pageId: page.id,
+        entryName,
+        pageName,
+        snippet
+      });
+    }
+  }
+
+  return results
+    .sort((a, b) => {
+      const aTitle = `${a.entryName} ${a.pageName}`.toLowerCase();
+      const bTitle = `${b.entryName} ${b.pageName}`.toLowerCase();
+      const aStrong = terms.every((term) => aTitle.includes(term)) ? 1 : 0;
+      const bStrong = terms.every((term) => bTitle.includes(term)) ? 1 : 0;
+      return bStrong - aStrong || a.entryName.localeCompare(b.entryName) || a.pageName.localeCompare(b.pageName);
+    })
+    .slice(0, 50);
+}
+
+function getBrowserJournalPage(ref) {
+  if (!ref) return null;
+  const entry = game.journal?.get(ref.entryId);
+  if (!entry || !canCurrentUserReadJournalDocument(entry)) return null;
+  const page = entry.pages?.get(ref.pageId);
+  if (!page || !canCurrentUserReadJournalDocument(page)) return null;
+  return { entry, page };
+}
+
+async function renderBrowserJournalPage(container, ref) {
+  const resolved = getBrowserJournalPage(ref);
+  if (!resolved) {
+    state.selectedBrowserPage = null;
+    const warning = document.createElement('div');
+    warning.className = 'fc-browser-empty';
+    warning.innerHTML = '<i class="fa-solid fa-lock"></i><strong>Journal unavailable</strong><span>This page no longer exists or you do not have permission to view it.</span>';
+    container.appendChild(warning);
+    return;
+  }
+
+  const { entry, page } = resolved;
+  const article = document.createElement('article');
+  article.className = 'fc-browser-journal';
+
+  const heading = document.createElement('div');
+  heading.className = 'fc-browser-journal-heading';
+  const parent = document.createElement('span');
+  parent.textContent = entry.name || 'Journal';
+  const title = document.createElement('h2');
+  title.textContent = page.name || entry.name || 'Journal Page';
+  heading.append(parent, title);
+  article.appendChild(heading);
+
+  const body = document.createElement('div');
+  body.className = 'fc-browser-journal-body';
+  body.innerHTML = '<div class="fc-browser-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading note…</div>';
+  article.appendChild(body);
+  container.appendChild(article);
+
+  const raw = getJournalTextContent(page);
+  if (!raw) {
+    body.innerHTML = '<p class="fc-browser-note-empty">This journal page does not contain searchable text content.</p>';
+    return;
+  }
+
+  try {
+    const editor = globalThis.TextEditor ?? globalThis.foundry?.applications?.ux?.TextEditor;
+    let html = raw;
+    if (editor?.enrichHTML) {
+      html = await editor.enrichHTML(raw, {
+        async: true,
+        documents: true,
+        links: true,
+        rolls: false,
+        secrets: Boolean(page.isOwner || entry.isOwner)
+      });
+    }
+    // Abort if the user navigated away while async enrichment was running.
+    if (!state.selectedBrowserPage || state.selectedBrowserPage.entryId !== ref.entryId || state.selectedBrowserPage.pageId !== ref.pageId) return;
+    body.innerHTML = html;
+    body.querySelectorAll('a[href^="http://"], a[href^="https://"]').forEach((link) => {
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    });
+  } catch (error) {
+    console.error(`${MODULE_ID} | Browser could not render journal page`, error);
+    body.textContent = htmlToPlainText(raw);
+  }
+}
+
+function renderBrowserBookmarkManager(container) {
+  if (!game.user?.isGM) {
+    state.browserBookmarkManagerOpen = false;
+    renderBrowserView();
+    return;
+  }
+
+  const help = document.createElement('div');
+  help.className = 'fc-browser-manager-help';
+  help.textContent = 'Add shortcuts that open real websites in a new browser tab. Only HTTP and HTTPS links are accepted.';
+  container.appendChild(help);
+
+  const form = document.createElement('form');
+  form.className = 'fc-browser-manager';
+  const rows = document.createElement('div');
+  rows.className = 'fc-browser-manager-rows';
+  form.appendChild(rows);
+
+  const working = getBrowserBookmarks().map((bookmark) => ({ ...bookmark }));
+
+  const syncWorkingFromRows = () => {
+    const rowEls = [...rows.querySelectorAll('.fc-browser-manager-row')];
+    rowEls.forEach((row, index) => {
+      if (!working[index]) return;
+      working[index].label = row.querySelector('[data-field="label"]')?.value ?? working[index].label;
+      working[index].url = row.querySelector('[data-field="url"]')?.value ?? working[index].url;
+      working[index].icon = sanitizeBrowserIcon(row.querySelector('[data-field="icon"]')?.value);
+    });
+  };
+
+  const drawRows = () => {
+    rows.innerHTML = '';
+    working.forEach((bookmark, index) => {
+      const row = document.createElement('div');
+      row.className = 'fc-browser-manager-row';
+
+      const label = document.createElement('input');
+      label.type = 'text';
+      label.maxLength = 60;
+      label.placeholder = 'Site name';
+      label.value = bookmark.label;
+      label.dataset.field = 'label';
+
+      const url = document.createElement('input');
+      url.type = 'url';
+      url.placeholder = 'https://example.com';
+      url.value = bookmark.url;
+      url.dataset.field = 'url';
+
+      const lower = document.createElement('div');
+      lower.className = 'fc-browser-manager-row-lower';
+      const icon = document.createElement('select');
+      icon.dataset.field = 'icon';
+      for (const [value, text] of BROWSER_ICON_CHOICES) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        option.selected = value === bookmark.icon;
+        icon.appendChild(option);
+      }
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'fc-browser-manager-remove';
+      remove.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      remove.title = 'Remove shortcut';
+      remove.addEventListener('click', () => {
+        syncWorkingFromRows();
+        working.splice(index, 1);
+        drawRows();
+      });
+      lower.append(icon, remove);
+      row.append(label, url, lower);
+      rows.appendChild(row);
+    });
+  };
+  drawRows();
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'fc-browser-manager-add';
+  add.innerHTML = '<i class="fa-solid fa-plus"></i> Add Shortcut';
+  add.addEventListener('click', () => {
+    syncWorkingFromRows();
+    working.push({ id: makeBrowserBookmarkId(), label: 'Website', url: 'https://', icon: 'globe' });
+    drawRows();
+    rows.lastElementChild?.querySelector('input')?.focus();
+  });
+  form.appendChild(add);
+
+  const actions = document.createElement('div');
+  actions.className = 'fc-browser-manager-actions';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'fc-browser-manager-cancel';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => {
+    state.browserBookmarkManagerOpen = false;
+    renderPhone();
+  });
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'fc-browser-manager-save';
+  save.innerHTML = '<i class="fa-solid fa-check"></i> Save';
+  actions.append(cancel, save);
+  form.appendChild(actions);
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const next = [];
+    const rowEls = [...rows.querySelectorAll('.fc-browser-manager-row')];
+    for (let index = 0; index < rowEls.length; index++) {
+      const row = rowEls[index];
+      const label = row.querySelector('[data-field="label"]')?.value?.trim() || 'Website';
+      const rawUrl = row.querySelector('[data-field="url"]')?.value?.trim() || '';
+      const url = normalizeExternalUrl(rawUrl);
+      if (!url) {
+        ui.notifications.warn(`Browser shortcut "${label}" needs a valid HTTP or HTTPS URL.`);
+        return;
+      }
+      next.push({
+        id: working[index]?.id || makeBrowserBookmarkId(),
+        label: label.slice(0, 60),
+        url,
+        icon: sanitizeBrowserIcon(row.querySelector('[data-field="icon"]')?.value)
+      });
+    }
+
+    try {
+      save.disabled = true;
+      await game.settings.set(MODULE_ID, BROWSER_BOOKMARKS_SETTING, next);
+      state.browserBookmarkManagerOpen = false;
+      renderPhone();
+    } catch (error) {
+      console.error(`${MODULE_ID} | Failed to save Browser shortcuts`, error);
+      ui.notifications.error('Browser shortcuts could not be saved.');
+      save.disabled = false;
+    }
+  });
+
+  container.appendChild(form);
+}
 
 function isInternalPhoneRecord(message) {
   return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message);

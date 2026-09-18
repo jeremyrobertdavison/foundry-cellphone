@@ -2,11 +2,17 @@
 
 An immersive in-game cellphone interface for modern-day Foundry VTT campaigns.
 
-Version **1.3.2** expands **Friendpage** with GM-managed active profiles and full NPC social identities. The GM can choose which player/user and NPC Actor profiles exist on Friendpage, then post, comment, Like, and Dislike as enabled NPCs. Existing messaging, NPC roleplay, typing indicators, calls, Mission Log, and Friendpage history remain available.
+Version **1.4.0** adds a fourth cellphone app: **Browser**. The Browser combines GM-configured external website shortcuts with a permission-aware search of Foundry Journal text pages. External shortcuts open in the user’s real web browser in a new tab, while Journal search results stay inside the cellphone interface. Existing messaging, calls, Mission Log, Friendpage, and NPC roleplay features remain available.
 
 ## Features
 
-- Cellphone **Home Screen** with Messages, Mission Log, and Friendpage apps
+- Cellphone **Home Screen** with Messages, Mission Log, Friendpage, and Browser apps
+- **Browser** app with a generic faux-browser interface
+- GM-managed external website shortcut tiles
+- External shortcuts open in the user’s real browser in a new tab
+- Browser search indexes Foundry Journal text pages the current user has permission to observe
+- Journal search results and Journal content open inside the cellphone interface
+- Journal secret blocks are excluded from search snippets for users who do not own the page/entry
 - **Friendpage global feed** showing public posts from active Friendpage profiles
 - GM-managed **active profile list** for Foundry users and NPC Actors
 - A **profile and wall** for every enabled user or NPC identity, using assigned character/Actor names and portraits
@@ -23,6 +29,20 @@ Version **1.3.2** expands **Friendpage** with GM-managed active profiles and ful
 - **Mission Log** app with GM-managed public or restricted assignments
 - GM-triggered calls as NPC Actors
 - Existing message and mission history from earlier releases remains readable
+
+## Browser
+
+Open the cellphone and choose **Browser**. The Browser app presents a generic in-world browser interface without using Firefox, Chrome, or other real-browser branding.
+
+### External shortcuts
+
+GMs can choose **Manage** on the Browser start page and configure named shortcut tiles. Each shortcut stores a label, an HTTP/HTTPS URL, and a generic icon. Clicking a shortcut opens the configured site in the user’s actual browser as a new tab.
+
+### Journal search
+
+The Browser search field searches Foundry Journal text pages that the current user has permission to observe. Search matches Journal names, page names, and visible page text. Results remain inside the cellphone; selecting a result renders that Journal page in the phone interface.
+
+The Browser checks Foundry document permissions before indexing a Journal or page. Secret sections are excluded from search text for users who are not owners.
 
 ## Friendpage
 
@@ -101,7 +121,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.3.2.zip
+foundry-cellphone-v1.4.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md
