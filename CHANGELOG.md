@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0
+
+- Added the **News** app to the cellphone Home Screen.
+- GMs can publish, edit, and delete public news stories.
+- News stories support a headline, short blurb, publisher, author, and GM-specified publication date/time.
+- Player access is read-only; the News app is a simple feed and does not open external pages.
+- Stories are sorted by publication date/time with newest items first.
+- News records persist in the Foundry world while remaining hidden from the normal chat feed.
+- The Home Screen now presents six apps in a balanced 2-column grid.
+- Existing messaging, calls, Mission Log, Friendpage, Browser, and Notes functionality is unchanged.
+
 ## 1.5.0
 
 - Added the **Notes** app to the cellphone Home Screen.

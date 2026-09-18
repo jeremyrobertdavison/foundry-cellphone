@@ -2,11 +2,14 @@
 
 An immersive in-game cellphone interface for modern-day Foundry VTT campaigns.
 
-Version **1.5.0** adds a fifth cellphone app: **Notes**. Each Foundry user gets a private in-world notebook for creating, editing, and deleting personal notes. Notes persist with the world and are kept separate from other users in the phone interface. Browser, Friendpage, Mission Log, messaging, calls, and NPC roleplay remain available.
+Version **1.6.0** adds a sixth cellphone app: **News**. The GM can publish a simple in-world news feed with headlines, blurbs, publisher names, bylines, and custom publication date/time values. Players have read-only access to the feed. Notes, Browser, Friendpage, Mission Log, messaging, calls, and NPC roleplay remain available.
 
 ## Features
 
-- Cellphone **Home Screen** with Messages, Mission Log, Friendpage, Browser, and Notes apps
+- Cellphone **Home Screen** with Messages, Mission Log, Friendpage, Browser, Notes, and News apps
+- **News** app with a GM-managed public headline feed
+- Publish headline, blurb, publisher, author, and publication date/time
+- Players have read-only News access; stories remain entirely inside the phone
 - **Notes** app with private per-user note storage
 - Create, edit, and delete personal notes with titles and freeform text
 - Notes persist in the Foundry world and are hidden from the normal Foundry chat feed
@@ -32,6 +35,10 @@ Version **1.5.0** adds a fifth cellphone app: **Notes**. Each Foundry user gets 
 - **Mission Log** app with GM-managed public or restricted assignments
 - GM-triggered calls as NPC Actors
 - Existing message and mission history from earlier releases remains readable
+
+## News
+
+The News app is a read-only public feed for players. GMs can publish headlines with a short blurb, publisher, author, and publication date/time. Stories are displayed inside the phone and do not open external pages.
 
 ## Notes
 
@@ -130,7 +137,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.5.0.zip
+foundry-cellphone-v1.6.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

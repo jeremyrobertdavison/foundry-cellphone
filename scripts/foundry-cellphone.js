@@ -3,6 +3,7 @@ const PHONE_FLAG = "phoneMessage";
 const MISSION_FLAG = "missionRecord";
 const FRIENDPAGE_FLAG = "friendpageRecord";
 const NOTE_FLAG = "noteRecord";
+const NEWS_FLAG = "newsRecord";
 const NPC_CONTACTS_SETTING = "npcContacts";
 const MISSION_SEEN_SETTING = "missionSeen";
 const FRIENDPAGE_PROFILES_SETTING = "friendpageProfiles";
@@ -44,6 +45,9 @@ const state = {
   selectedNoteId: null,
   noteEditorOpen: false,
   noteDraft: { title: "", body: "" },
+  selectedNewsId: null,
+  newsEditorOpen: false,
+  newsDraft: { headline: "", blurb: "", author: "", publisher: "", publishedAt: "" },
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -140,6 +144,11 @@ Hooks.on("renderChatMessage", (message, html) => {
 });
 
 Hooks.on("createChatMessage", (message) => {
+  if (isNewsRecord(message)) {
+    refreshAll();
+    return;
+  }
+
   if (isNoteRecord(message)) {
     const data = getNoteData(message);
     if (data?.ownerUserId === game.user?.id) refreshAll();
@@ -190,6 +199,11 @@ Hooks.on("createChatMessage", (message) => {
 });
 
 Hooks.on("updateChatMessage", (message) => {
+  if (isNewsRecord(message)) {
+    refreshAll();
+    return;
+  }
+
   if (isNoteRecord(message)) {
     const data = getNoteData(message);
     if (data?.ownerUserId === game.user?.id) refreshAll();
@@ -280,6 +294,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-notes"><i class="fa-solid fa-note-sticky"></i></span>
               <span class="fc-app-label">Notes</span>
             </button>
+            <button class="fc-app-icon" type="button" data-app="news">
+              <span class="fc-app-symbol fc-app-symbol-news"><i class="fa-solid fa-newspaper"></i></span>
+              <span class="fc-app-label">News</span>
+            </button>
           </div>
         </section>
 
@@ -361,6 +379,10 @@ function buildPhone() {
           <section class="fc-notes-view" hidden>
             <div class="fc-notes-content"></div>
           </section>
+
+          <section class="fc-news-view" hidden>
+            <div class="fc-news-content"></div>
+          </section>
         </main>
       </div>
 
@@ -428,7 +450,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser', 'notes'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -458,6 +480,10 @@ function openApp(app) {
     state.selectedNoteId = null;
     state.noteEditorOpen = false;
     resetNoteDraft();
+  } else if (app === 'news') {
+    state.selectedNewsId = null;
+    state.newsEditorOpen = false;
+    resetNewsDraft();
   }
   renderPhone();
 }
@@ -478,6 +504,9 @@ function goHome() {
   state.selectedNoteId = null;
   state.noteEditorOpen = false;
   resetNoteDraft();
+  state.selectedNewsId = null;
+  state.newsEditorOpen = false;
+  resetNewsDraft();
   renderPhone();
 }
 
@@ -509,6 +538,18 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "news") {
+    if (state.newsEditorOpen) {
+      state.newsEditorOpen = false;
+      state.selectedNewsId = null;
+      resetNewsDraft();
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.app === "notes") {
     if (state.noteEditorOpen) {
@@ -914,6 +955,7 @@ function renderPhone() {
   const friendpageView = state.root.querySelector(".fc-friendpage-view");
   const browserView = state.root.querySelector(".fc-browser-view");
   const notesView = state.root.querySelector(".fc-notes-view");
+  const newsView = state.root.querySelector(".fc-news-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -928,6 +970,7 @@ function renderPhone() {
   friendpageView.hidden = true;
   browserView.hidden = true;
   notesView.hidden = true;
+  newsView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -971,6 +1014,13 @@ function renderPhone() {
   if (state.app === "notes") {
     notesView.hidden = false;
     renderNotesView();
+    updateBadges();
+    return;
+  }
+
+  if (state.app === "news") {
+    newsView.hidden = false;
+    renderNewsView();
     updateBadges();
     return;
   }
@@ -1025,6 +1075,13 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "news") {
+    back.hidden = false;
+    title.textContent = state.newsEditorOpen ? (state.selectedNewsId ? "Edit Story" : "New Story") : "News";
+    subtitle.textContent = state.newsEditorOpen ? "GM News Desk" : "Latest headlines";
+    return;
+  }
 
   if (state.app === "notes") {
     back.hidden = false;
@@ -3299,6 +3356,298 @@ function renderBrowserBookmarkManager(container) {
 
 
 // ---------------------------
+// News app
+// ---------------------------
+
+function isNewsRecord(message) {
+  return Boolean(getNewsData(message));
+}
+
+function getNewsData(message) {
+  return message?.getFlag?.(MODULE_ID, NEWS_FLAG) ?? message?.flags?.[MODULE_ID]?.[NEWS_FLAG] ?? null;
+}
+
+function getNewsRecords() {
+  return game.messages.contents
+    .filter(isNewsRecord)
+    .map((document) => ({ document, data: getNewsData(document) }))
+    .filter((record) => Boolean(record.data?.id))
+    .sort((a, b) => String(b.data.publishedAt || '').localeCompare(String(a.data.publishedAt || '')) || Number(b.data.createdAt || 0) - Number(a.data.createdAt || 0));
+}
+
+function getNewsById(id) {
+  return getNewsRecords().find((record) => record.data.id === id) ?? null;
+}
+
+function getLocalDateTimeValue(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function resetNewsDraft(data = null) {
+  state.newsDraft = {
+    headline: data?.headline || '',
+    blurb: data?.blurb || '',
+    author: data?.author || '',
+    publisher: data?.publisher || '',
+    publishedAt: data?.publishedAt || getLocalDateTimeValue()
+  };
+}
+
+function renderNewsView() {
+  const container = state.root.querySelector('.fc-news-content');
+  container.replaceChildren();
+  if (state.newsEditorOpen) renderNewsEditor(container);
+  else renderNewsFeed(container);
+}
+
+function renderNewsFeed(container) {
+  if (game.user?.isGM) {
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'fc-manager-button fc-news-add';
+    add.innerHTML = '<i class="fa-solid fa-plus"></i><span>Add Headline</span>';
+    add.addEventListener('click', () => {
+      state.selectedNewsId = null;
+      resetNewsDraft();
+      state.newsEditorOpen = true;
+      renderPhone();
+    });
+    container.appendChild(add);
+  }
+
+  const records = getNewsRecords();
+  if (!records.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-news-empty';
+    empty.innerHTML = '<i class="fa-regular fa-newspaper"></i><strong>No stories yet</strong><span>Published headlines will appear here.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const record of records) {
+    const { data } = record;
+    const card = document.createElement('article');
+    card.className = 'fc-news-card';
+
+    const top = document.createElement('div');
+    top.className = 'fc-news-card-top';
+    const publisher = document.createElement('div');
+    publisher.className = 'fc-news-publisher';
+    publisher.textContent = data.publisher || 'News';
+    top.appendChild(publisher);
+
+    if (game.user?.isGM) {
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'fc-news-edit';
+      edit.title = 'Edit story';
+      edit.setAttribute('aria-label', `Edit ${data.headline || 'news story'}`);
+      edit.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      edit.addEventListener('click', () => {
+        state.selectedNewsId = data.id;
+        resetNewsDraft(data);
+        state.newsEditorOpen = true;
+        renderPhone();
+      });
+      top.appendChild(edit);
+    }
+
+    const headline = document.createElement('h3');
+    headline.className = 'fc-news-headline';
+    headline.textContent = data.headline || 'Untitled Story';
+
+    const blurb = document.createElement('p');
+    blurb.className = 'fc-news-blurb';
+    blurb.textContent = data.blurb || '';
+    blurb.hidden = !String(data.blurb || '').trim();
+
+    const meta = document.createElement('div');
+    meta.className = 'fc-news-meta';
+    const bits = [];
+    if (String(data.author || '').trim()) bits.push(`By ${data.author}`);
+    if (String(data.publishedAt || '').trim()) bits.push(formatNewsPublication(data.publishedAt));
+    meta.textContent = bits.join(' • ');
+    meta.hidden = bits.length === 0;
+
+    card.append(top, headline, blurb, meta);
+    container.appendChild(card);
+  }
+}
+
+function renderNewsEditor(container) {
+  if (!game.user?.isGM) {
+    state.newsEditorOpen = false;
+    state.selectedNewsId = null;
+    resetNewsDraft();
+    renderPhone();
+    return;
+  }
+
+  const form = document.createElement('form');
+  form.className = 'fc-news-form';
+
+  const helper = document.createElement('div');
+  helper.className = 'fc-news-editor-help';
+  helper.innerHTML = '<i class="fa-solid fa-newspaper"></i><span>Publish a headline to every player\'s News feed.</span>';
+
+  const makeField = (labelText, input) => {
+    const label = document.createElement('label');
+    label.className = 'fc-news-field';
+    label.textContent = labelText;
+    label.appendChild(input);
+    return label;
+  };
+
+  const headlineInput = document.createElement('input');
+  headlineInput.type = 'text';
+  headlineInput.maxLength = 160;
+  headlineInput.placeholder = 'Breaking news headline';
+  headlineInput.value = state.newsDraft.headline;
+
+  const blurbInput = document.createElement('textarea');
+  blurbInput.rows = 5;
+  blurbInput.maxLength = 900;
+  blurbInput.placeholder = 'Short summary of the story...';
+  blurbInput.value = state.newsDraft.blurb;
+
+  const publisherInput = document.createElement('input');
+  publisherInput.type = 'text';
+  publisherInput.maxLength = 100;
+  publisherInput.placeholder = 'Daily Bugle';
+  publisherInput.value = state.newsDraft.publisher;
+
+  const authorInput = document.createElement('input');
+  authorInput.type = 'text';
+  authorInput.maxLength = 100;
+  authorInput.placeholder = 'Ben Urich';
+  authorInput.value = state.newsDraft.author;
+
+  const publishedInput = document.createElement('input');
+  publishedInput.type = 'datetime-local';
+  publishedInput.value = state.newsDraft.publishedAt || getLocalDateTimeValue();
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'fc-create-group-button fc-news-save';
+  save.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>Publish Story</span>';
+
+  form.append(
+    helper,
+    makeField('Headline', headlineInput),
+    makeField('Blurb', blurbInput),
+    makeField('Publisher', publisherInput),
+    makeField('Author', authorInput),
+    makeField('Publication date / time', publishedInput),
+    save
+  );
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    state.newsDraft = {
+      headline: headlineInput.value,
+      blurb: blurbInput.value,
+      publisher: publisherInput.value,
+      author: authorInput.value,
+      publishedAt: publishedInput.value || getLocalDateTimeValue()
+    };
+    save.disabled = true;
+    try {
+      await saveNewsDraft();
+    } finally {
+      save.disabled = false;
+    }
+  });
+  container.appendChild(form);
+
+  if (state.selectedNewsId) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'fc-manager-button fc-news-delete';
+    del.innerHTML = '<i class="fa-solid fa-trash"></i><span>Delete Story</span>';
+    del.addEventListener('click', () => deleteSelectedNews());
+    container.appendChild(del);
+  }
+
+  requestAnimationFrame(() => headlineInput.focus());
+}
+
+async function saveNewsDraft() {
+  if (!game.user?.isGM) return;
+  const headline = String(state.newsDraft.headline || '').trim();
+  if (!headline) {
+    ui.notifications.warn('Enter a headline before publishing.');
+    return;
+  }
+
+  const existing = state.selectedNewsId ? getNewsById(state.selectedNewsId) : null;
+  const now = Date.now();
+  const data = {
+    schema: 1,
+    id: existing?.data?.id || makeId(),
+    headline,
+    blurb: String(state.newsDraft.blurb || '').trim(),
+    author: String(state.newsDraft.author || '').trim(),
+    publisher: String(state.newsDraft.publisher || '').trim(),
+    publishedAt: String(state.newsDraft.publishedAt || getLocalDateTimeValue()),
+    createdAt: existing?.data?.createdAt || now,
+    updatedAt: now,
+    createdByUserId: existing?.data?.createdByUserId || game.user.id
+  };
+
+  try {
+    if (existing) {
+      await existing.document.update({
+        content: `[News] ${formatSafeChatContent(headline)}`,
+        speaker: { alias: data.publisher || 'News' },
+        [`flags.${MODULE_ID}.${NEWS_FLAG}`]: data
+      });
+    } else {
+      await createChatMessageDocument({
+        content: `[News] ${formatSafeChatContent(headline)}`,
+        speaker: { alias: data.publisher || 'News' },
+        flags: { [MODULE_ID]: { [NEWS_FLAG]: data } }
+      });
+    }
+    state.selectedNewsId = null;
+    state.newsEditorOpen = false;
+    resetNewsDraft();
+    ui.notifications.info(existing ? 'News story updated.' : 'News story published.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to save news story`, error);
+    ui.notifications.error('The news story could not be saved. Check the console for details.');
+  }
+}
+
+async function deleteSelectedNews() {
+  if (!game.user?.isGM || !state.selectedNewsId) return;
+  const record = getNewsById(state.selectedNewsId);
+  if (!record) return;
+  const confirmed = window.confirm(`Delete "${record.data.headline || 'Untitled Story'}"?`);
+  if (!confirmed) return;
+  try {
+    await record.document.delete();
+    state.selectedNewsId = null;
+    state.newsEditorOpen = false;
+    resetNewsDraft();
+    ui.notifications.info('News story deleted.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to delete news story`, error);
+    ui.notifications.error('The news story could not be deleted. Check the console for details.');
+  }
+}
+
+function formatNewsPublication(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return String(value || '');
+  const [, year, month, day, hour, minute] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+  return date.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// ---------------------------
 // Notes app
 // ---------------------------
 
@@ -3521,7 +3870,7 @@ function formatNoteDate(timestamp) {
 }
 
 function isInternalPhoneRecord(message) {
-  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message) || isNoteRecord(message);
+  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message) || isNoteRecord(message) || isNewsRecord(message);
 }
 
 function isMissionRecord(message) {
