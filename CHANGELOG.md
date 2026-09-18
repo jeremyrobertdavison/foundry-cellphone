@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0
+
+- Added **Friendpage**, a public in-world social-media app on the cellphone Home Screen.
+- Added a global Friendpage feed.
+- Added a profile and wall for every Foundry user, using assigned character identity when available.
+- Users can post statuses to their own wall.
+- Users can post public messages to other users' walls.
+- Added public comments on Friendpage posts.
+- Added Like and Dislike reactions with counts.
+- Reactions are one-per-user-per-post and can be switched or removed.
+- Added profile browsing and clickable author/wall-recipient navigation.
+- Friendpage records persist through Foundry ChatMessage documents but are suppressed from the standard Foundry chat feed.
+- Existing messaging, calls, Mission Log, and NPC features remain unchanged.
+
 ## 1.2.1
 
 - Fixed Mission Log selection cards being compressed into a single horizontal row by Foundry's global button styling.

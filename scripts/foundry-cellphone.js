@@ -1,6 +1,7 @@
 const MODULE_ID = "foundry-cellphone";
 const PHONE_FLAG = "phoneMessage";
 const MISSION_FLAG = "missionRecord";
+const FRIENDPAGE_FLAG = "friendpageRecord";
 const NPC_CONTACTS_SETTING = "npcContacts";
 const MISSION_SEEN_SETTING = "missionSeen";
 const SOCKET_NAME = `module.${MODULE_ID}`;
@@ -29,6 +30,8 @@ const state = {
   selectedMissionId: null,
   missionEditorOpen: false,
   missionDraft: { title: "", status: "Active", priority: "Normal", visibility: "all", selectedUserIds: new Set(), description: "" },
+  friendpageMode: "feed",
+  selectedFriendUserId: null,
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -103,6 +106,11 @@ Hooks.on("createChatMessage", (message) => {
     return;
   }
 
+  if (isFriendpageRecord(message)) {
+    refreshAll();
+    return;
+  }
+
   if (!isPhoneMessage(message)) return;
   if (!isPhoneMessageVisibleToCurrentUser(message)) return;
 
@@ -145,7 +153,7 @@ Hooks.on("updateChatMessage", (message) => {
     }
     return;
   }
-  if (isPhoneMessage(message)) refreshAll();
+  if (isPhoneMessage(message) || isFriendpageRecord(message)) refreshAll();
 });
 
 Hooks.on("deleteChatMessage", (message) => {
@@ -207,6 +215,10 @@ function buildPhone() {
             <button class="fc-app-icon" type="button" data-app="missions">
               <span class="fc-app-symbol fc-app-symbol-missions"><i class="fa-solid fa-clipboard-list"></i><span class="fc-app-badge fc-missions-app-badge" hidden>0</span></span>
               <span class="fc-app-label">Mission Log</span>
+            </button>
+            <button class="fc-app-icon" type="button" data-app="friendpage">
+              <span class="fc-app-symbol fc-app-symbol-friendpage"><i class="fa-solid fa-user-group"></i></span>
+              <span class="fc-app-label">Friendpage</span>
             </button>
           </div>
         </section>
@@ -277,6 +289,10 @@ function buildPhone() {
           <section class="fc-mission-view" hidden>
             <div class="fc-mission-content"></div>
           </section>
+
+          <section class="fc-friendpage-view" hidden>
+            <div class="fc-friendpage-content"></div>
+          </section>
         </main>
       </div>
 
@@ -344,7 +360,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -357,10 +373,13 @@ function openApp(app) {
     state.actingNpcId = null;
     state.npcManagerOpen = false;
     state.gmNpcCallOpen = false;
-  } else {
+  } else if (app === 'missions') {
     state.selectedMissionId = null;
     state.missionEditorOpen = false;
     resetMissionDraft();
+  } else if (app === 'friendpage') {
+    state.friendpageMode = 'feed';
+    state.selectedFriendUserId = null;
   }
   renderPhone();
 }
@@ -371,6 +390,8 @@ function goHome() {
   state.selectedMissionId = null;
   state.missionEditorOpen = false;
   resetMissionDraft();
+  state.friendpageMode = 'feed';
+  state.selectedFriendUserId = null;
   renderPhone();
 }
 
@@ -402,6 +423,16 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "friendpage") {
+    if (state.friendpageMode === "profiles" && state.selectedFriendUserId) {
+      state.selectedFriendUserId = null;
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.app === "missions") {
     if (state.missionEditorOpen) {
@@ -755,6 +786,7 @@ function renderPhone() {
   const conversation = state.root.querySelector(".fc-conversation-view");
   const contactsView = state.root.querySelector(".fc-contacts-view");
   const missionView = state.root.querySelector(".fc-mission-view");
+  const friendpageView = state.root.querySelector(".fc-friendpage-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -766,6 +798,7 @@ function renderPhone() {
   conversation.hidden = true;
   contactsView.hidden = true;
   missionView.hidden = true;
+  friendpageView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -788,6 +821,13 @@ function renderPhone() {
   if (state.app === "missions") {
     missionView.hidden = false;
     renderMissionView();
+    updateBadges();
+    return;
+  }
+
+  if (state.app === "friendpage") {
+    friendpageView.hidden = false;
+    renderFriendpageView();
     updateBadges();
     return;
   }
@@ -842,6 +882,15 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "friendpage") {
+    back.hidden = false;
+    title.textContent = state.selectedFriendUserId
+      ? getUserDisplayName(game.users.get(state.selectedFriendUserId))
+      : "Friendpage";
+    subtitle.textContent = state.selectedFriendUserId ? "Profile & wall" : "Your social feed";
+    return;
+  }
 
   if (state.app === "missions") {
     back.hidden = false;
@@ -1802,11 +1851,413 @@ function getAllPhoneMessages() {
 
 
 // ---------------------------
+// Friendpage social app
+// ---------------------------
+
+function isFriendpageRecord(message) {
+  return Boolean(getFriendpageData(message));
+}
+
+function getFriendpageData(message) {
+  return message?.getFlag?.(MODULE_ID, FRIENDPAGE_FLAG) ?? message?.flags?.[MODULE_ID]?.[FRIENDPAGE_FLAG] ?? null;
+}
+
+function getFriendpageRecords() {
+  return game.messages.contents
+    .filter(isFriendpageRecord)
+    .map((document) => ({ document, data: getFriendpageData(document) }))
+    .filter((record) => record.data && record.data.type)
+    .sort((a, b) => Number(a.data.createdAt || 0) - Number(b.data.createdAt || 0));
+}
+
+function getFriendpagePosts() {
+  return getFriendpageRecords()
+    .filter((record) => record.data.type === 'post')
+    .sort((a, b) => Number(b.data.createdAt || 0) - Number(a.data.createdAt || 0));
+}
+
+function getFriendpageComments(postId) {
+  return getFriendpageRecords()
+    .filter((record) => record.data.type === 'comment' && record.data.postId === postId)
+    .sort((a, b) => Number(a.data.createdAt || 0) - Number(b.data.createdAt || 0));
+}
+
+function getFriendpageReactionState(postId) {
+  const latestByUser = new Map();
+  for (const record of getFriendpageRecords()) {
+    const data = record.data;
+    if (data.type !== 'reaction' || data.postId !== postId || !data.authorUserId) continue;
+    const current = latestByUser.get(data.authorUserId);
+    if (!current || Number(data.createdAt || 0) >= Number(current.createdAt || 0)) latestByUser.set(data.authorUserId, data);
+  }
+  let likes = 0;
+  let dislikes = 0;
+  for (const data of latestByUser.values()) {
+    if (data.reaction === 'like') likes += 1;
+    if (data.reaction === 'dislike') dislikes += 1;
+  }
+  return { likes, dislikes, mine: latestByUser.get(game.user.id)?.reaction || 'none' };
+}
+
+function getFriendpageUsers() {
+  return [...game.users.contents].sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b)));
+}
+
+function getFriendpageHandle(user) {
+  const base = getUserDisplayName(user).toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24);
+  return `@${base || 'user'}`;
+}
+
+function renderFriendpageView() {
+  const container = state.root.querySelector('.fc-friendpage-content');
+  container.replaceChildren();
+
+  const tabs = document.createElement('div');
+  tabs.className = 'fc-friend-tabs';
+  for (const [mode, icon, label] of [['feed', 'fa-house', 'Feed'], ['profiles', 'fa-address-book', 'Profiles']]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `fc-friend-tab${state.friendpageMode === mode ? ' is-active' : ''}`;
+    button.innerHTML = `<i class="fa-solid ${icon}"></i><span>${label}</span>`;
+    button.addEventListener('click', () => {
+      state.friendpageMode = mode;
+      if (mode === 'feed') state.selectedFriendUserId = null;
+      renderPhone();
+    });
+    tabs.appendChild(button);
+  }
+  container.appendChild(tabs);
+
+  if (state.friendpageMode === 'profiles') {
+    if (state.selectedFriendUserId) renderFriendpageProfile(container, state.selectedFriendUserId);
+    else renderFriendpageProfileList(container);
+    return;
+  }
+
+  renderFriendpageComposer(container, game.user.id);
+  renderFriendpagePostList(container, getFriendpagePosts());
+}
+
+function renderFriendpageProfileList(container) {
+  const intro = document.createElement('div');
+  intro.className = 'fc-friend-section-title';
+  intro.textContent = 'Profiles';
+  container.appendChild(intro);
+
+  for (const user of getFriendpageUsers()) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'fc-friend-profile-row';
+    const avatar = document.createElement('img');
+    avatar.src = getUserAvatar(user);
+    avatar.alt = '';
+    const text = document.createElement('div');
+    text.className = 'fc-friend-profile-text';
+    const name = document.createElement('strong');
+    name.textContent = getUserDisplayName(user);
+    const handle = document.createElement('span');
+    handle.textContent = getFriendpageHandle(user);
+    text.append(name, handle);
+    const arrow = document.createElement('i');
+    arrow.className = 'fa-solid fa-chevron-right';
+    button.append(avatar, text, arrow);
+    button.addEventListener('click', () => {
+      state.selectedFriendUserId = user.id;
+      renderPhone();
+    });
+    container.appendChild(button);
+  }
+}
+
+function renderFriendpageProfile(container, userId) {
+  const user = game.users.get(userId);
+  if (!user) {
+    state.selectedFriendUserId = null;
+    renderPhone();
+    return;
+  }
+
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'fc-friend-profile-back';
+  back.innerHTML = '<i class="fa-solid fa-chevron-left"></i><span>All Profiles</span>';
+  back.addEventListener('click', () => { state.selectedFriendUserId = null; renderPhone(); });
+
+  const hero = document.createElement('div');
+  hero.className = 'fc-friend-profile-hero';
+  const avatar = document.createElement('img');
+  avatar.src = getUserAvatar(user);
+  avatar.alt = '';
+  const info = document.createElement('div');
+  const name = document.createElement('h2');
+  name.textContent = getUserDisplayName(user);
+  const handle = document.createElement('div');
+  handle.className = 'fc-friend-handle';
+  handle.textContent = getFriendpageHandle(user);
+  info.append(name, handle);
+  hero.append(avatar, info);
+  container.append(back, hero);
+
+  renderFriendpageComposer(container, user.id);
+  const wallPosts = getFriendpagePosts().filter((record) => record.data.targetUserId === user.id);
+  renderFriendpagePostList(container, wallPosts, 'Wall');
+}
+
+function renderFriendpageComposer(container, targetUserId) {
+  const target = game.users.get(targetUserId) || game.user;
+  const form = document.createElement('form');
+  form.className = 'fc-friend-composer';
+  const row = document.createElement('div');
+  row.className = 'fc-friend-composer-top';
+  const avatar = document.createElement('img');
+  avatar.src = getUserAvatar(game.user);
+  avatar.alt = '';
+  const textarea = document.createElement('textarea');
+  textarea.rows = 2;
+  textarea.maxLength = 2000;
+  textarea.placeholder = target.id === game.user.id ? "What's happening?" : `Write on ${getUserDisplayName(target)}'s wall...`;
+  row.append(avatar, textarea);
+  const submit = document.createElement('button');
+  submit.type = 'submit';
+  submit.className = 'fc-friend-post-button';
+  submit.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>Post</span>';
+  form.append(row, submit);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const body = textarea.value.trim();
+    if (!body) return;
+    submit.disabled = true;
+    try {
+      await createFriendpagePost(body, target.id);
+      textarea.value = '';
+      renderPhone();
+    } catch (error) {
+      console.error(`${MODULE_ID} | Failed to create Friendpage post`, error);
+      ui.notifications.error('Friendpage could not publish the post. Check the console for details.');
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  container.appendChild(form);
+}
+
+function renderFriendpagePostList(container, posts, label = 'Global Feed') {
+  const heading = document.createElement('div');
+  heading.className = 'fc-friend-section-title';
+  heading.textContent = label;
+  container.appendChild(heading);
+
+  if (!posts.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-friend-empty';
+    empty.innerHTML = '<i class="fa-regular fa-face-smile"></i><strong>No posts yet</strong><span>Be the first to say something.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const record of posts) renderFriendpagePost(container, record);
+}
+
+function renderFriendpagePost(container, record) {
+  const data = record.data;
+  const author = game.users.get(data.authorUserId);
+  const target = game.users.get(data.targetUserId);
+  const card = document.createElement('article');
+  card.className = 'fc-friend-post';
+
+  const header = document.createElement('div');
+  header.className = 'fc-friend-post-header';
+  const avatar = document.createElement('img');
+  avatar.src = getUserAvatar(author);
+  avatar.alt = '';
+  const identity = document.createElement('div');
+  identity.className = 'fc-friend-post-identity';
+  const nameLine = document.createElement('div');
+  nameLine.className = 'fc-friend-post-name';
+  const authorButton = document.createElement('button');
+  authorButton.type = 'button';
+  authorButton.className = 'fc-friend-link';
+  authorButton.textContent = getUserDisplayName(author);
+  authorButton.addEventListener('click', () => openFriendpageProfile(data.authorUserId));
+  nameLine.appendChild(authorButton);
+  if (target && data.targetUserId !== data.authorUserId) {
+    const arrow = document.createElement('span');
+    arrow.textContent = ' → ';
+    const targetButton = document.createElement('button');
+    targetButton.type = 'button';
+    targetButton.className = 'fc-friend-link';
+    targetButton.textContent = getUserDisplayName(target);
+    targetButton.addEventListener('click', () => openFriendpageProfile(data.targetUserId));
+    nameLine.append(arrow, targetButton);
+  }
+  const meta = document.createElement('div');
+  meta.className = 'fc-friend-post-meta';
+  meta.textContent = `${getFriendpageHandle(author)} · ${formatFriendpageDate(data.createdAt)}`;
+  identity.append(nameLine, meta);
+  header.append(avatar, identity);
+
+  const body = document.createElement('div');
+  body.className = 'fc-friend-post-body';
+  body.textContent = data.body || '';
+
+  const reaction = getFriendpageReactionState(data.id);
+  const comments = getFriendpageComments(data.id);
+  const actions = document.createElement('div');
+  actions.className = 'fc-friend-actions';
+  const like = buildFriendReactionButton('like', reaction.likes, reaction.mine === 'like', data.id);
+  const dislike = buildFriendReactionButton('dislike', reaction.dislikes, reaction.mine === 'dislike', data.id);
+  const commentCount = document.createElement('span');
+  commentCount.className = 'fc-friend-comment-count';
+  commentCount.innerHTML = `<i class="fa-regular fa-comment"></i><span>${comments.length}</span>`;
+  actions.append(like, dislike, commentCount);
+
+  card.append(header, body, actions);
+
+  if (comments.length) {
+    const commentList = document.createElement('div');
+    commentList.className = 'fc-friend-comments';
+    for (const comment of comments) {
+      const row = document.createElement('div');
+      row.className = 'fc-friend-comment';
+      const commentAuthor = game.users.get(comment.data.authorUserId);
+      const img = document.createElement('img');
+      img.src = getUserAvatar(commentAuthor);
+      img.alt = '';
+      const bubble = document.createElement('div');
+      bubble.className = 'fc-friend-comment-bubble';
+      const who = document.createElement('strong');
+      who.textContent = getUserDisplayName(commentAuthor);
+      const text = document.createElement('span');
+      text.textContent = comment.data.body || '';
+      bubble.append(who, text);
+      row.append(img, bubble);
+      commentList.appendChild(row);
+    }
+    card.appendChild(commentList);
+  }
+
+  const commentForm = document.createElement('form');
+  commentForm.className = 'fc-friend-comment-form';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 1000;
+  input.placeholder = 'Write a comment...';
+  const send = document.createElement('button');
+  send.type = 'submit';
+  send.setAttribute('aria-label', 'Post comment');
+  send.innerHTML = '<i class="fa-solid fa-arrow-up"></i>';
+  commentForm.append(input, send);
+  commentForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    send.disabled = true;
+    try {
+      await createFriendpageComment(data.id, text);
+      renderPhone();
+    } catch (error) {
+      console.error(`${MODULE_ID} | Failed to create Friendpage comment`, error);
+      ui.notifications.error('Friendpage could not publish the comment.');
+    } finally {
+      send.disabled = false;
+    }
+  });
+  card.appendChild(commentForm);
+  container.appendChild(card);
+}
+
+function buildFriendReactionButton(kind, count, active, postId) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `fc-friend-reaction${active ? ' is-active' : ''}`;
+  button.innerHTML = kind === 'like'
+    ? `<i class="fa-solid fa-thumbs-up"></i><span>${count}</span>`
+    : `<i class="fa-solid fa-thumbs-down"></i><span>${count}</span>`;
+  button.title = kind === 'like' ? 'Like' : 'Dislike';
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await createFriendpageReaction(postId, active ? 'none' : kind);
+      renderPhone();
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
+function openFriendpageProfile(userId) {
+  if (!game.users.get(userId)) return;
+  state.app = 'friendpage';
+  state.friendpageMode = 'profiles';
+  state.selectedFriendUserId = userId;
+  renderPhone();
+}
+
+async function createFriendpagePost(body, targetUserId) {
+  const now = Date.now();
+  const data = {
+    schema: 1,
+    type: 'post',
+    id: makeId(),
+    authorUserId: game.user.id,
+    targetUserId: targetUserId || game.user.id,
+    body,
+    createdAt: now
+  };
+  return createFriendpageDocument(data, `[Friendpage] ${getUserDisplayName(game.user)} posted`);
+}
+
+async function createFriendpageComment(postId, body) {
+  const data = {
+    schema: 1,
+    type: 'comment',
+    id: makeId(),
+    postId,
+    authorUserId: game.user.id,
+    body,
+    createdAt: Date.now()
+  };
+  return createFriendpageDocument(data, `[Friendpage] ${getUserDisplayName(game.user)} commented`);
+}
+
+async function createFriendpageReaction(postId, reaction) {
+  const data = {
+    schema: 1,
+    type: 'reaction',
+    id: makeId(),
+    postId,
+    authorUserId: game.user.id,
+    reaction,
+    createdAt: Date.now()
+  };
+  return createFriendpageDocument(data, `[Friendpage] reaction`);
+}
+
+function createFriendpageDocument(data, content) {
+  return createChatMessageDocument({
+    content: formatSafeChatContent(content),
+    speaker: { alias: getUserDisplayName(game.user) },
+    flags: { [MODULE_ID]: { [FRIENDPAGE_FLAG]: data } }
+  });
+}
+
+function formatFriendpageDate(timestamp) {
+  const date = new Date(Number(timestamp) || Date.now());
+  const now = Date.now();
+  const diff = Math.max(0, now - date.getTime());
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+// ---------------------------
 // Mission Log
 // ---------------------------
 
 function isInternalPhoneRecord(message) {
-  return isPhoneMessage(message) || isMissionRecord(message);
+  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message);
 }
 
 function isMissionRecord(message) {

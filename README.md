@@ -2,76 +2,66 @@
 
 An immersive in-game cellphone interface for modern-day Foundry VTT campaigns.
 
-Version **1.2.1** includes the Mission Log layout fix and retains a true cellphone **Home Screen** and the first standalone phone app beyond messaging: **Mission Log**. Existing messaging, NPC roleplay, typing indicators, calls, and GM call-as-NPC features remain available through the Messages app.
+Version **1.3.0** adds **Friendpage**, an in-world social-media app built directly into the cellphone Home Screen. Existing messaging, NPC roleplay, typing indicators, calls, and Mission Log features remain available.
 
 ## Features
 
-- New cellphone **Home Screen** with app icons
-- **Messages** app containing the existing Group and Direct messaging systems
-- **Mission Log** app with player read-only access
-- GM-only mission creation, editing, and deletion
-- Mission title, briefing, status, and priority
-- Missions can be visible to **all players** or only **selected players**
-- Restricted missions use Foundry whisper recipients so unassigned players are not given the mission record
-- Mission Log unread/new badges when an assigned mission is created or updated
-- Launcher badge now combines unread messages and unread mission updates
-- Persistent Party Chat and custom group chats
-- Mixed PC/NPC group chats with GM NPC identities
-- Persistent direct messages between players
-- GM-managed NPC text contacts
-- Player-to-player calls
-- GM-triggered calls as any NPC Actor
-- Incoming call pop-up, Accept/Decline, live call timer, and synchronized Hang Up
-- Live typing indicators
-- Existing message history from v1.0.0+ remains readable
+- Cellphone **Home Screen** with Messages, Mission Log, and Friendpage apps
+- **Friendpage global feed** showing public posts from every Foundry user
+- A **profile and wall** for every user, using the assigned character name and portrait when available
+- Post a status to your own wall
+- Write a public post on another user's wall
+- Public comments on Friendpage posts
+- Like and dislike reactions with live counts
+- One active reaction per user per post; clicking the same reaction again removes it, and choosing the opposite reaction switches it
+- Click a post author or wall recipient to jump directly to that profile
+- Persistent Friendpage history stored as module-owned Foundry records and hidden from the normal Foundry chat feed
+- **Messages** app with Party Chat, custom groups, DMs, NPC texting, typing indicators, and calls
+- **Mission Log** app with GM-managed public or restricted assignments
+- GM-triggered calls as NPC Actors
+- Existing message and mission history from earlier releases remains readable
 
-## Home Screen
+## Friendpage
 
-Opening the cellphone now starts at the Home Screen. The first two apps are:
+Open the cellphone and choose **Friendpage**.
 
-- **Messages** — Groups, Direct Messages, NPC texting, typing indicators, and calls.
-- **Mission Log** — GM-created assignments and briefings.
+### Feed
 
-Unread badges appear directly on the appropriate app icon. The main Foundry cellphone launcher badge displays the combined unread total.
+The Feed tab shows all Friendpage posts newest-first. A post on your own wall is treated as a status. A post on somebody else's wall displays both the author and the wall owner.
 
-## Mission Log: GM workflow
+Every post supports:
 
-1. Open the cellphone.
-2. Open **Mission Log**.
-3. Click **Add Mission**.
-4. Enter a mission title and briefing.
-5. Choose a status: Active, Pending, On Hold, Completed, or Failed.
-6. Choose a priority: Low, Normal, High, or Critical.
-7. Choose visibility:
-   - **Everyone** — all players can see the mission.
-   - **Selected Players** — choose exactly which player users receive the mission.
-8. Click **Save Mission**.
+- Likes
+- Dislikes
+- Comments
+- Profile navigation
 
-Open an existing mission as GM and choose **Edit Mission** to update it. Players assigned to the mission receive a new unread Mission Log badge whenever the mission is updated.
+All Friendpage content is public to the Foundry world. It is intended as in-character social-media roleplay rather than private communication.
 
-Deleting a mission removes it from every phone that could see it.
+### Profiles and walls
 
-## Mission Log: player workflow
+Choose **Profiles** to browse the users in the world. Friendpage uses the user's assigned Foundry character name and portrait when one is available, falling back to the Foundry username/avatar otherwise.
 
-Players can open **Mission Log** from the Home Screen and read missions they are authorized to see. Players cannot create, edit, or delete missions.
+Open a profile to view that user's wall. From there you can publish directly to their wall.
 
-Restricted missions are persisted as private Foundry records addressed only to the selected player users and GM users. They are not merely hidden with CSS from unassigned players.
+### Reactions
 
-Opening a mission marks that mission's current version as read on that client.
+Each user has one current reaction per post. A user can:
 
-## Messaging
+- Like a post
+- Dislike a post
+- Switch between Like and Dislike
+- Click the active reaction again to remove it
 
-The Messages app contains the existing **Groups** and **Direct** tabs. Party Chat, custom groups, PC/NPC mixed groups, direct messages, NPC contacts, typing indicators, and calls work as in previous releases.
+Reaction counts are calculated from the latest reaction state for each user.
 
-## GM calling a player as an NPC
+## Mission Log
 
-1. Open **Messages** → **Direct**.
-2. Click **Call Player as NPC**.
-3. Choose any unassigned NPC Actor as the caller.
-4. Choose an online player.
-5. Click **Place Call**.
+The Mission Log remains GM-managed and player read-only. Missions can be visible to everyone or restricted to selected player users. Restricted missions use Foundry whisper recipients rather than merely hiding data in the UI.
 
-The recipient's phone automatically opens with the selected NPC's name and portrait. Calls remain roleplay signaling/UI only; voice audio continues through your normal Foundry/Discord/in-person setup.
+## Messaging and calls
+
+The Messages app retains Party Chat, custom PC/NPC group chats, player DMs, GM-managed NPC text contacts, typing indicators, player-to-player calls, and GM calls as NPC Actors. Calls are roleplay signaling/UI only; voice audio continues through your normal Foundry/Discord/in-person setup.
 
 ## Foundry compatibility
 
@@ -81,7 +71,7 @@ The recipient's phone automatically opens with the selected NPC's name and portr
 
 ## Privacy note
 
-Cellphone communications and Mission Log entries are in-game roleplaying data, not encrypted communications. Player DMs and restricted missions use Foundry recipient controls. GM users are intentionally included where necessary to portray NPCs and manage missions.
+Friendpage is deliberately public in-world content. Text messages and restricted Mission Log entries continue to use their existing Foundry recipient controls. This module is intended for roleplaying data and does not provide encrypted communication.
 
 ## GitHub installation
 
@@ -102,7 +92,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.2.1.zip
+foundry-cellphone-v1.3.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md
