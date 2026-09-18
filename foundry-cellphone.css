@@ -4176,6 +4176,146 @@
   cursor: zoom-in;
 }
 
+
+/* v2.0.2 large Maps viewer */
+.fc-map-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3, 6, 10, .78);
+  backdrop-filter: blur(5px);
+}
+
+.fc-map-lightbox-window {
+  width: min(1120px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: #0b1118;
+  box-shadow: 0 24px 80px rgba(0,0,0,.62);
+  color: #fff;
+}
+
+.fc-map-lightbox-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 10px 12px 10px 18px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.018));
+}
+
+.fc-map-lightbox-title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fc-map-lightbox-title span {
+  color: #8bd8cf;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .15em;
+}
+
+.fc-map-lightbox-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.fc-map-lightbox-close {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255,255,255,.08);
+  box-shadow: none;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.fc-map-lightbox-close:hover,
+.fc-map-lightbox-close:focus-visible {
+  background: rgba(255,255,255,.16);
+  outline: none;
+}
+
+.fc-map-lightbox-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  background: #05080c;
+}
+
+.fc-map-lightbox-canvas {
+  width: 100%;
+  min-width: 720px;
+  max-width: none;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 28px rgba(0,0,0,.38);
+}
+
+.fc-map-lightbox-canvas .fc-map-marker img {
+  width: 52px;
+  height: 52px;
+  border-width: 3px;
+}
+
+.fc-map-lightbox-canvas .fc-map-marker span {
+  max-width: 150px;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
+.fc-map-lightbox-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 16px 11px;
+  border-top: 1px solid rgba(255,255,255,.07);
+  color: rgba(255,255,255,.52);
+  font-size: 10px;
+  text-align: center;
+}
+
+@media (max-width: 800px) {
+  .fc-map-lightbox {
+    padding: 10px;
+  }
+
+  .fc-map-lightbox-window {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .fc-map-lightbox-canvas {
+    min-width: 640px;
+  }
+}
+
 /* v2.0.0 Mondo Rides app */
 .fc-app-symbol-mondo {
   background: linear-gradient(145deg, #131820, #05070a);
@@ -4260,49 +4400,6 @@
   line-height: 1;
   font-weight: 900;
   letter-spacing: -.02em;
-}
-
-.fc-mondo-current {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: rgba(255,255,255,.045);
-  border: 1px solid rgba(255,255,255,.065);
-}
-
-.fc-mondo-current-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #65f1c1;
-  box-shadow: 0 0 0 3px rgba(101,241,193,.13);
-}
-
-.fc-mondo-current > div {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.fc-mondo-current span {
-  color: rgba(255,255,255,.46);
-  font-size: 8px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-}
-
-.fc-mondo-current strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 850;
 }
 
 .fc-mondo-manage {

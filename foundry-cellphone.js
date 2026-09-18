@@ -590,6 +590,7 @@ function openApp(app) {
 function goHome() {
   stopTyping();
   pauseArcadeActionGames();
+  closeLargeMapWindow();
   state.app = 'home';
   state.selectedMissionId = null;
   state.missionEditorOpen = false;
@@ -620,6 +621,7 @@ function goHome() {
 function closePhone() {
   stopTyping();
   pauseArcadeActionGames();
+  closeLargeMapWindow();
   state.phoneOpen = false;
   if (!state.root) return;
   state.root.classList.remove("is-open");
@@ -4747,11 +4749,6 @@ function getMondoCurrentSceneId() {
   return game.scenes?.viewed?.id || globalThis.canvas?.scene?.id || game.user?.viewedScene || null;
 }
 
-function getMondoCurrentSceneName() {
-  const id = getMondoCurrentSceneId();
-  return game.scenes?.get(id)?.name || globalThis.canvas?.scene?.name || 'Current location';
-}
-
 function renderMondoRidesView() {
   const container = state.root.querySelector('.fc-mondo-content');
   if (!container) return;
@@ -4772,19 +4769,6 @@ function renderMondoPassengerView(container) {
     <div class="fc-mondo-question">Where to?</div>
   `;
   container.appendChild(hero);
-
-  const current = document.createElement('div');
-  current.className = 'fc-mondo-current';
-  const currentDot = document.createElement('span');
-  currentDot.className = 'fc-mondo-current-dot';
-  const currentCopy = document.createElement('div');
-  const currentLabel = document.createElement('span');
-  currentLabel.textContent = 'Current location';
-  const currentName = document.createElement('strong');
-  currentName.textContent = getMondoCurrentSceneName();
-  currentCopy.append(currentLabel, currentName);
-  current.append(currentDot, currentCopy);
-  container.appendChild(current);
 
   if (game.user?.isGM) {
     const manage = document.createElement('button');
@@ -5309,34 +5293,99 @@ function renderMapViewer(container) {
   const expand = document.createElement('button');
   expand.type = 'button';
   expand.className = 'fc-map-expand';
-  expand.innerHTML = state.mapExpanded ? '<i class="fa-solid fa-compress"></i> Fit' : '<i class="fa-solid fa-expand"></i> Enlarge';
-  expand.addEventListener('click', () => {
-    state.mapExpanded = !state.mapExpanded;
-    renderPhone();
-  });
+  expand.innerHTML = '<i class="fa-solid fa-up-right-and-down-left-from-center"></i> Open Large';
+  expand.addEventListener('click', () => openLargeMapWindow(current.data));
   toolbar.append(audience, expand);
   container.appendChild(toolbar);
 
   const viewport = document.createElement('div');
-  viewport.className = `fc-map-viewport${state.mapExpanded ? ' is-expanded' : ''}`;
+  viewport.className = 'fc-map-viewport';
   const canvas = buildMapCanvas(current.data, { editable: false });
-  if (!state.mapExpanded) {
-    canvas.classList.add('is-tappable');
-    canvas.title = 'Click to enlarge map';
-    canvas.addEventListener('click', () => {
-      state.mapExpanded = true;
-      renderPhone();
-    });
-  }
+  canvas.classList.add('is-tappable');
+  canvas.title = 'Click to open a larger map';
+  canvas.setAttribute('role', 'button');
+  canvas.setAttribute('tabindex', '0');
+  canvas.setAttribute('aria-label', `Open ${current.data.name || 'map'} in a larger window`);
+  canvas.addEventListener('click', () => openLargeMapWindow(current.data));
+  canvas.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openLargeMapWindow(current.data);
+  });
   viewport.appendChild(canvas);
   container.appendChild(viewport);
 
   const hint = document.createElement('div');
   hint.className = 'fc-map-view-hint';
-  hint.innerHTML = state.mapExpanded
-    ? '<i class="fa-solid fa-hand"></i><span>Scroll the enlarged map to inspect it.</span>'
-    : '<i class="fa-solid fa-location-dot"></i><span>Markers are reference locations only and do not move Foundry tokens.</span>';
+  hint.innerHTML = '<i class="fa-solid fa-magnifying-glass-plus"></i><span>Click the map to open a larger view. Markers are reference locations only.</span>';
   container.appendChild(hint);
+}
+
+function openLargeMapWindow(mapData) {
+  closeLargeMapWindow();
+  if (!mapData) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'fc-map-lightbox';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', `${mapData.name || 'Map'} large view`);
+
+  const windowEl = document.createElement('div');
+  windowEl.className = 'fc-map-lightbox-window';
+
+  const header = document.createElement('div');
+  header.className = 'fc-map-lightbox-header';
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'fc-map-lightbox-title';
+  const kicker = document.createElement('span');
+  kicker.textContent = 'MAPS';
+  const title = document.createElement('strong');
+  title.textContent = mapData.name || 'Map';
+  titleWrap.append(kicker, title);
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'fc-map-lightbox-close';
+  close.setAttribute('aria-label', 'Close large map');
+  close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+  close.addEventListener('click', closeLargeMapWindow);
+
+  header.append(titleWrap, close);
+
+  const viewport = document.createElement('div');
+  viewport.className = 'fc-map-lightbox-viewport';
+  const canvas = buildMapCanvas(mapData, { editable: false });
+  canvas.classList.add('fc-map-lightbox-canvas');
+  viewport.appendChild(canvas);
+
+  const footer = document.createElement('div');
+  footer.className = 'fc-map-lightbox-footer';
+  footer.innerHTML = '<i class="fa-solid fa-location-dot"></i><span>Reference map only — marker positions do not move Foundry tokens.</span>';
+
+  windowEl.append(header, viewport, footer);
+  overlay.appendChild(windowEl);
+  overlay.addEventListener('pointerdown', (event) => {
+    if (event.target === overlay) closeLargeMapWindow();
+  });
+
+  const onKeydown = (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    closeLargeMapWindow();
+  };
+  overlay._fcKeydownHandler = onKeydown;
+  window.addEventListener('keydown', onKeydown);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => close.focus());
+}
+
+function closeLargeMapWindow() {
+  const overlay = document.querySelector('.fc-map-lightbox');
+  if (!overlay) return;
+  if (overlay._fcKeydownHandler) window.removeEventListener('keydown', overlay._fcKeydownHandler);
+  overlay.remove();
 }
 
 function buildMapCanvas(data, { editable = false } = {}) {

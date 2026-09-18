@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.2
+
+- Changed the Maps app so clicking a map opens it in a much larger dedicated overlay window instead of enlarging it inside the phone.
+- Added an **Open Large** button beside the map visibility indicator.
+- Large maps use most of the Foundry window and support scrolling for oversized or wide map images.
+- Increased character marker and label size in the large viewer for easier reading.
+- Added Escape, close-button, and backdrop-click controls for closing the large map.
+- The phone-sized map remains a compact preview and existing map data/permissions are unchanged.
+
+## 2.0.1
+
+- Removed the standalone **Current Location** banner from Mondo Rides.
+- Destination and ride-request behavior is otherwise unchanged.
+
 ## 2.0.0
 
 - Added **Mondo Rides**, a ride-share-inspired cellphone app for player-controlled downtime travel between GM-approved Foundry Scenes.

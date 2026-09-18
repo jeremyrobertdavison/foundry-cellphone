@@ -2,7 +2,7 @@
   "id": "foundry-cellphone",
   "title": "Foundry Cellphone",
   "description": "An immersive in-game cellphone interface for modern Foundry VTT campaigns with messaging, missions, social media, Browser, Notes, News, Arcade, Maps, and Mondo Rides scene travel.",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "authors": [
     {
       "name": "Jeremy Davison"
@@ -14,7 +14,7 @@
   },
   "url": "https://github.com/jeremyrobertdavison/foundry-cellphone",
   "manifest": "https://raw.githubusercontent.com/jeremyrobertdavison/foundry-cellphone/main/module.json",
-  "download": "https://github.com/jeremyrobertdavison/foundry-cellphone/releases/download/v2.0.0/foundry-cellphone-v2.0.0.zip",
+  "download": "https://github.com/jeremyrobertdavison/foundry-cellphone/releases/download/v2.0.2/foundry-cellphone-v2.0.2.zip",
   "esmodules": [
     "scripts/foundry-cellphone.js"
   ],
