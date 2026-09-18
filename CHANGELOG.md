@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0
+
+- Added a true cellphone **Home Screen** that opens before individual apps.
+- Moved all existing group/direct messaging and call features into the **Messages** app.
+- Added the **Mission Log** app.
+- Added GM-only mission creation, editing, and deletion.
+- Missions support title, briefing text, status, and priority.
+- Missions may be visible to all players or restricted to selected player users.
+- Restricted missions use Foundry whisper recipients so unassigned players are not recipients of the mission record.
+- Players have read-only access to missions they are authorized to view.
+- Added per-mission NEW indicators and a Mission Log app badge for newly created or updated missions.
+- The main cellphone launcher badge now combines unread messages and unread mission updates.
+- Hanging up a call now returns the phone to the new Home Screen.
+- Existing messaging, NPC texting, group chats, typing indicators, player calls, and GM call-as-NPC features remain intact.
+
 ## 1.1.4
 
 - Added a GM-only **Call Player as NPC** control to the Direct Messages screen.

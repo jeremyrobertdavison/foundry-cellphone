@@ -1,6 +1,8 @@
 const MODULE_ID = "foundry-cellphone";
 const PHONE_FLAG = "phoneMessage";
+const MISSION_FLAG = "missionRecord";
 const NPC_CONTACTS_SETTING = "npcContacts";
+const MISSION_SEEN_SETTING = "missionSeen";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -11,6 +13,7 @@ const CALL_RING_TIMEOUT_MS = 30000;
 
 const state = {
   phoneOpen: false,
+  app: "home",
   mode: "group",
   selectedGroupId: null,
   groupCreatorOpen: false,
@@ -23,6 +26,9 @@ const state = {
   gmNpcCallOpen: false,
   gmNpcCallActorId: null,
   gmNpcCallUserId: null,
+  selectedMissionId: null,
+  missionEditorOpen: false,
+  missionDraft: { title: "", status: "Active", priority: "Normal", visibility: "all", selectedUserIds: new Set(), description: "" },
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -56,6 +62,16 @@ Hooks.once("init", () => {
     default: [],
     onChange: () => refreshAll()
   });
+
+  game.settings.register(MODULE_ID, MISSION_SEEN_SETTING, {
+    name: "Mission Log Read State",
+    hint: "Tracks which mission updates this client has viewed.",
+    scope: "client",
+    config: false,
+    type: Object,
+    default: {},
+    onChange: () => refreshAll()
+  });
 });
 
 Hooks.once("ready", () => {
@@ -69,18 +85,24 @@ Hooks.once("ready", () => {
 
 // V13+ chat rendering hook.
 Hooks.on("renderChatMessageHTML", (message, html) => {
-  if (!isPhoneMessage(message)) return;
+  if (!isInternalPhoneRecord(message)) return;
   html?.remove?.();
 });
 
 // V12 compatibility hook.
 Hooks.on("renderChatMessage", (message, html) => {
-  if (!isPhoneMessage(message)) return;
+  if (!isInternalPhoneRecord(message)) return;
   if (html?.remove) html.remove();
   else if (html?.hide) html.hide();
 });
 
 Hooks.on("createChatMessage", (message) => {
+  if (isMissionRecord(message)) {
+    const data = getMissionData(message);
+    if (data && isMissionVisibleToCurrentUser(data)) refreshAll();
+    return;
+  }
+
   if (!isPhoneMessage(message)) return;
   if (!isPhoneMessageVisibleToCurrentUser(message)) return;
 
@@ -95,7 +117,7 @@ Hooks.on("createChatMessage", (message) => {
   if (data.kind === "group") {
     const groupId = getGroupIdFromData(data);
     if (data.event !== "group-create") {
-      const activelyViewing = state.phoneOpen && state.mode === "group" && state.selectedGroupId === groupId;
+      const activelyViewing = state.phoneOpen && state.app === "messages" && state.mode === "group" && state.selectedGroupId === groupId;
       if (!activelyViewing) {
         state.unreadGroups.set(groupId, (state.unreadGroups.get(groupId) ?? 0) + 1);
       }
@@ -103,7 +125,7 @@ Hooks.on("createChatMessage", (message) => {
   } else if (data.kind === "dm") {
     const threadKey = getMessageThreadKeyForCurrentUser(data);
     if (threadKey) {
-      const activelyViewing = state.phoneOpen && state.mode === "dm" && getCurrentThreadKey() === threadKey;
+      const activelyViewing = state.phoneOpen && state.app === "messages" && state.mode === "dm" && getCurrentThreadKey() === threadKey;
       if (!activelyViewing) {
         state.unreadDirect.set(threadKey, (state.unreadDirect.get(threadKey) ?? 0) + 1);
       }
@@ -113,8 +135,21 @@ Hooks.on("createChatMessage", (message) => {
   refreshAll();
 });
 
-Hooks.on("deleteChatMessage", (message) => {
+Hooks.on("updateChatMessage", (message) => {
+  if (isMissionRecord(message)) {
+    const data = getMissionData(message);
+    if (data && state.phoneOpen && state.app === "missions" && state.selectedMissionId === data.id && !state.missionEditorOpen && isMissionVisibleToCurrentUser(data)) {
+      markMissionSeen(data.id, data.updatedAt);
+    } else {
+      refreshAll();
+    }
+    return;
+  }
   if (isPhoneMessage(message)) refreshAll();
+});
+
+Hooks.on("deleteChatMessage", (message) => {
+  if (isInternalPhoneRecord(message)) refreshAll();
 });
 
 Hooks.on("userConnected", () => refreshAll());
@@ -151,6 +186,30 @@ function buildPhone() {
           <span class="fc-status-time">--:--</span>
           <span class="fc-status-icons"><i class="fa-solid fa-signal"></i> <i class="fa-solid fa-wifi"></i> <i class="fa-solid fa-battery-three-quarters"></i></span>
         </div>
+
+        <section class="fc-home-screen">
+          <div class="fc-home-topbar">
+            <div class="fc-home-user">
+              <img class="fc-home-avatar" src="icons/svg/mystery-man.svg" alt="">
+              <div>
+                <div class="fc-home-greeting">Cellphone</div>
+                <div class="fc-home-name">User</div>
+              </div>
+            </div>
+            <button class="fc-icon-button fc-home-close" type="button" aria-label="Close phone"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="fc-home-date"></div>
+          <div class="fc-app-grid">
+            <button class="fc-app-icon" type="button" data-app="messages">
+              <span class="fc-app-symbol fc-app-symbol-messages"><i class="fa-solid fa-message"></i><span class="fc-app-badge fc-messages-app-badge" hidden>0</span></span>
+              <span class="fc-app-label">Messages</span>
+            </button>
+            <button class="fc-app-icon" type="button" data-app="missions">
+              <span class="fc-app-symbol fc-app-symbol-missions"><i class="fa-solid fa-clipboard-list"></i><span class="fc-app-badge fc-missions-app-badge" hidden>0</span></span>
+              <span class="fc-app-label">Mission Log</span>
+            </button>
+          </div>
+        </section>
 
         <section class="fc-call-screen" hidden>
           <div class="fc-call-kicker"></div>
@@ -214,6 +273,10 @@ function buildPhone() {
           <section class="fc-contacts-view">
             <div class="fc-contacts"></div>
           </section>
+
+          <section class="fc-mission-view" hidden>
+            <div class="fc-mission-content"></div>
+          </section>
         </main>
       </div>
 
@@ -226,6 +289,8 @@ function buildPhone() {
   state.root = root;
 
   root.querySelector(".fc-close").addEventListener("click", closePhone);
+  root.querySelector(".fc-home-close").addEventListener("click", closePhone);
+  root.querySelectorAll(".fc-app-icon").forEach((button) => button.addEventListener("click", () => openApp(button.dataset.app)));
   root.querySelector(".fc-call-button").addEventListener("click", initiateCallFromCurrentConversation);
   root.querySelector(".fc-call-accept").addEventListener("click", acceptIncomingCall);
   root.querySelector(".fc-call-end").addEventListener("click", endCurrentCall);
@@ -272,15 +337,41 @@ function togglePhone() {
 function openPhone() {
   if (!state.root) buildPhone();
   state.phoneOpen = true;
+  state.app = "home";
   state.root.hidden = false;
   state.root.classList.add("is-open");
-  markCurrentConversationRead();
   renderPhone();
+}
 
-  requestAnimationFrame(() => {
-    const input = state.root.querySelector(".fc-message-input");
-    if (input && input.offsetParent !== null) input.focus();
-  });
+function openApp(app) {
+  if (!['messages', 'missions'].includes(app)) return;
+  stopTyping();
+  state.app = app;
+  if (app === 'messages') {
+    state.mode = 'group';
+    state.selectedGroupId = null;
+    state.groupCreatorOpen = false;
+    state.groupSenderKey = null;
+    state.selectedContactType = null;
+    state.selectedContactId = null;
+    state.actingNpcId = null;
+    state.npcManagerOpen = false;
+    state.gmNpcCallOpen = false;
+  } else {
+    state.selectedMissionId = null;
+    state.missionEditorOpen = false;
+    resetMissionDraft();
+  }
+  renderPhone();
+}
+
+function goHome() {
+  stopTyping();
+  state.app = 'home';
+  state.selectedMissionId = null;
+  state.missionEditorOpen = false;
+  resetMissionDraft();
+  renderPhone();
 }
 
 function closePhone() {
@@ -311,6 +402,22 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "missions") {
+    if (state.missionEditorOpen) {
+      state.missionEditorOpen = false;
+      resetMissionDraft();
+      renderPhone();
+      return;
+    }
+    if (state.selectedMissionId) {
+      state.selectedMissionId = null;
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.mode === "group") {
     if (state.groupCreatorOpen) {
@@ -358,10 +465,14 @@ function goBack() {
     state.selectedContactType = null;
     state.selectedContactId = null;
     renderPhone();
+    return;
   }
+
+  goHome();
 }
 
 function markCurrentConversationRead() {
+  if (state.app !== "messages") return;
   if (state.mode === "group") {
     if (state.selectedGroupId) state.unreadGroups.set(state.selectedGroupId, 0);
   } else {
@@ -636,16 +747,25 @@ function renderPhone() {
 
   updateStatusTime();
 
+  const home = state.root.querySelector(".fc-home-screen");
   const callScreen = state.root.querySelector(".fc-call-screen");
   const header = state.root.querySelector(".fc-header");
   const tabs = state.root.querySelector(".fc-tabs");
   const content = state.root.querySelector(".fc-content");
+  const conversation = state.root.querySelector(".fc-conversation-view");
+  const contactsView = state.root.querySelector(".fc-contacts-view");
+  const missionView = state.root.querySelector(".fc-mission-view");
+  const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
   callScreen.hidden = !inCallUi;
-  header.hidden = inCallUi;
-  tabs.hidden = inCallUi;
-  content.hidden = inCallUi;
+  home.hidden = true;
+  header.hidden = true;
+  tabs.hidden = true;
+  content.hidden = true;
+  conversation.hidden = true;
+  contactsView.hidden = true;
+  missionView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -653,13 +773,27 @@ function renderPhone() {
     return;
   }
 
-  updateTabs();
+  if (state.app === "home") {
+    home.hidden = false;
+    renderHomeScreen();
+    updateBadges();
+    return;
+  }
+
+  header.hidden = false;
+  content.hidden = false;
   updateHeader();
   updateCallButton();
 
-  const conversation = state.root.querySelector(".fc-conversation-view");
-  const contactsView = state.root.querySelector(".fc-contacts-view");
-  const composer = state.root.querySelector(".fc-composer");
+  if (state.app === "missions") {
+    missionView.hidden = false;
+    renderMissionView();
+    updateBadges();
+    return;
+  }
+
+  tabs.hidden = false;
+  updateTabs();
 
   let showConversation = false;
   if (state.mode === "group") showConversation = Boolean(state.selectedGroupId) && !state.groupCreatorOpen;
@@ -683,6 +817,15 @@ function renderPhone() {
   updateBadges();
 }
 
+function renderHomeScreen() {
+  const avatar = state.root.querySelector('.fc-home-avatar');
+  const name = state.root.querySelector('.fc-home-name');
+  const date = state.root.querySelector('.fc-home-date');
+  avatar.src = getUserAvatar(game.user);
+  name.textContent = getUserDisplayName(game.user);
+  date.textContent = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
 function updateStatusTime() {
   const el = state.root?.querySelector(".fc-status-time");
   if (!el) return;
@@ -700,6 +843,24 @@ function updateHeader() {
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
 
+  if (state.app === "missions") {
+    back.hidden = false;
+    if (state.missionEditorOpen) {
+      title.textContent = state.selectedMissionId ? "Edit Mission" : "New Mission";
+      subtitle.textContent = "GM Mission Control";
+      return;
+    }
+    if (state.selectedMissionId) {
+      const record = getMissionById(state.selectedMissionId);
+      title.textContent = record?.data?.title || "Mission";
+      subtitle.textContent = record?.data?.status || "Mission Briefing";
+      return;
+    }
+    title.textContent = "Mission Log";
+    subtitle.textContent = "Assignments & briefings";
+    return;
+  }
+
   if (state.mode === "group") {
     if (state.groupCreatorOpen) {
       title.textContent = "New Group";
@@ -711,7 +872,7 @@ function updateHeader() {
     if (!state.selectedGroupId) {
       title.textContent = "Group Chats";
       subtitle.textContent = "Party and private groups";
-      back.hidden = true;
+      back.hidden = false;
       return;
     }
 
@@ -761,7 +922,7 @@ function updateHeader() {
   if (!state.selectedContactId) {
     title.textContent = "Direct Messages";
     subtitle.textContent = "Choose a contact";
-    back.hidden = true;
+    back.hidden = false;
     return;
   }
 
@@ -1639,6 +1800,410 @@ function getAllPhoneMessages() {
     .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
 }
 
+
+// ---------------------------
+// Mission Log
+// ---------------------------
+
+function isInternalPhoneRecord(message) {
+  return isPhoneMessage(message) || isMissionRecord(message);
+}
+
+function isMissionRecord(message) {
+  return Boolean(getMissionData(message));
+}
+
+function getMissionData(message) {
+  return message?.getFlag?.(MODULE_ID, MISSION_FLAG) ?? message?.flags?.[MODULE_ID]?.[MISSION_FLAG] ?? null;
+}
+
+function isMissionVisibleToCurrentUser(data) {
+  if (!data) return false;
+  if (game.user?.isGM) return true;
+  if (data.visibility === 'all') return true;
+  return Array.isArray(data.selectedUserIds) && data.selectedUserIds.includes(game.user.id);
+}
+
+function getMissionRecords() {
+  const latestById = new Map();
+  for (const document of game.messages.contents.filter(isMissionRecord)) {
+    const data = getMissionData(document);
+    if (!data || !isMissionVisibleToCurrentUser(data)) continue;
+    const key = data.id || document.id;
+    const current = latestById.get(key);
+    if (!current || Number(data.updatedAt || 0) >= Number(current.data.updatedAt || 0)) {
+      latestById.set(key, { document, data });
+    }
+  }
+  return [...latestById.values()].sort((a, b) => {
+    const rank = { Active: 0, Pending: 1, 'On Hold': 2, Completed: 3, Failed: 4 };
+    const statusDelta = (rank[a.data.status] ?? 9) - (rank[b.data.status] ?? 9);
+    if (statusDelta) return statusDelta;
+    return Number(b.data.updatedAt || 0) - Number(a.data.updatedAt || 0);
+  });
+}
+
+function getMissionById(id) {
+  return getMissionRecords().find((record) => record.data.id === id) ?? null;
+}
+
+function getMissionSeenMap() {
+  const value = game.settings.get(MODULE_ID, MISSION_SEEN_SETTING);
+  const allUsers = value && typeof value === 'object' ? value : {};
+  const userSeen = allUsers[game.user.id];
+  return userSeen && typeof userSeen === 'object' ? { ...userSeen } : {};
+}
+
+function isMissionUnread(data) {
+  if (!data?.id) return false;
+  const seen = getMissionSeenMap();
+  return Number(seen[data.id] || 0) < Number(data.updatedAt || data.createdAt || 0);
+}
+
+function getMissionUnreadCount() {
+  return getMissionRecords().filter((record) => isMissionUnread(record.data)).length;
+}
+
+async function markMissionSeen(id, version) {
+  if (!id) return;
+  const rootValue = game.settings.get(MODULE_ID, MISSION_SEEN_SETTING);
+  const allUsers = rootValue && typeof rootValue === 'object' ? { ...rootValue } : {};
+  const seen = allUsers[game.user.id] && typeof allUsers[game.user.id] === 'object' ? { ...allUsers[game.user.id] } : {};
+  const next = Math.max(Number(seen[id] || 0), Number(version || Date.now()));
+  if (Number(seen[id] || 0) >= next) {
+    refreshAll();
+    return;
+  }
+  seen[id] = next;
+  allUsers[game.user.id] = seen;
+  await game.settings.set(MODULE_ID, MISSION_SEEN_SETTING, allUsers);
+}
+
+function resetMissionDraft(data = null) {
+  state.missionDraft = {
+    title: data?.title || '',
+    status: data?.status || 'Active',
+    priority: data?.priority || 'Normal',
+    visibility: data?.visibility || 'all',
+    selectedUserIds: new Set(Array.isArray(data?.selectedUserIds) ? data.selectedUserIds : []),
+    description: data?.description || ''
+  };
+}
+
+function renderMissionView() {
+  const container = state.root.querySelector('.fc-mission-content');
+  container.replaceChildren();
+  if (state.missionEditorOpen && game.user.isGM) {
+    renderMissionEditor(container);
+    return;
+  }
+  if (state.selectedMissionId) {
+    renderMissionDetail(container);
+    return;
+  }
+  renderMissionList(container);
+}
+
+function renderMissionList(container) {
+  if (game.user.isGM) {
+    const add = document.createElement('button');
+    add.className = 'fc-manager-button fc-mission-add';
+    add.type = 'button';
+    add.innerHTML = `<i class="fa-solid fa-plus"></i><span>Add Mission</span>`;
+    add.addEventListener('click', () => {
+      state.selectedMissionId = null;
+      state.missionEditorOpen = true;
+      resetMissionDraft();
+      renderPhone();
+    });
+    container.appendChild(add);
+  }
+
+  const missions = getMissionRecords();
+  if (!missions.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-empty';
+    empty.innerHTML = `<i class="fa-solid fa-clipboard-list"></i><strong>No missions assigned</strong><span>New assignments from the GM will appear here.</span>`;
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const record of missions) {
+    const { data } = record;
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = `fc-mission-card fc-mission-status-${String(data.status || 'Active').toLowerCase().replace(/\s+/g, '-')}`;
+
+    const top = document.createElement('div');
+    top.className = 'fc-mission-card-top';
+    const title = document.createElement('div');
+    title.className = 'fc-mission-card-title';
+    title.textContent = data.title || 'Untitled Mission';
+    top.appendChild(title);
+    if (isMissionUnread(data)) {
+      const badge = document.createElement('span');
+      badge.className = 'fc-mission-new';
+      badge.textContent = 'NEW';
+      top.appendChild(badge);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'fc-mission-card-meta';
+    meta.innerHTML = `<span>${escapeMissionText(data.status || 'Active')}</span><span>${escapeMissionText(data.priority || 'Normal')} Priority</span>`;
+
+    const preview = document.createElement('div');
+    preview.className = 'fc-mission-card-preview';
+    preview.textContent = truncate(data.description || 'Open mission briefing.', 86);
+
+    const audience = document.createElement('div');
+    audience.className = 'fc-mission-card-audience';
+    audience.innerHTML = `<i class="fa-solid fa-user-shield"></i><span>${escapeMissionText(getMissionAudienceLabel(data))}</span>`;
+
+    card.append(top, meta, preview, audience);
+    card.addEventListener('click', async () => {
+      state.selectedMissionId = data.id;
+      state.missionEditorOpen = false;
+      await markMissionSeen(data.id, data.updatedAt);
+      renderPhone();
+    });
+    container.appendChild(card);
+  }
+}
+
+function renderMissionDetail(container) {
+  const record = getMissionById(state.selectedMissionId);
+  if (!record) {
+    state.selectedMissionId = null;
+    renderMissionList(container);
+    return;
+  }
+  const { data } = record;
+
+  const hero = document.createElement('div');
+  hero.className = 'fc-mission-detail-hero';
+  const icon = document.createElement('div');
+  icon.className = 'fc-mission-detail-icon';
+  icon.innerHTML = `<i class="fa-solid fa-shield-halved"></i>`;
+  const title = document.createElement('h2');
+  title.textContent = data.title || 'Untitled Mission';
+  hero.append(icon, title);
+
+  const chips = document.createElement('div');
+  chips.className = 'fc-mission-chips';
+  chips.innerHTML = `<span>${escapeMissionText(data.status || 'Active')}</span><span>${escapeMissionText(data.priority || 'Normal')} Priority</span>`;
+
+  const audience = document.createElement('div');
+  audience.className = 'fc-mission-detail-audience';
+  audience.innerHTML = `<i class="fa-solid fa-users"></i><div><strong>Assigned</strong><span>${escapeMissionText(getMissionAudienceLabel(data))}</span></div>`;
+
+  const body = document.createElement('div');
+  body.className = 'fc-mission-detail-body';
+  body.textContent = data.description || 'No additional briefing has been provided.';
+
+  const updated = document.createElement('div');
+  updated.className = 'fc-mission-updated';
+  updated.textContent = `Updated ${formatMissionDate(data.updatedAt || data.createdAt)}`;
+
+  container.append(hero, chips, audience, body, updated);
+
+  if (game.user.isGM) {
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'fc-manager-button fc-mission-edit';
+    edit.innerHTML = `<i class="fa-solid fa-pen"></i><span>Edit Mission</span>`;
+    edit.addEventListener('click', () => {
+      resetMissionDraft(data);
+      state.missionEditorOpen = true;
+      renderPhone();
+    });
+    container.appendChild(edit);
+  }
+}
+
+function renderMissionEditor(container) {
+  const draft = state.missionDraft;
+  const form = document.createElement('form');
+  form.className = 'fc-mission-form';
+
+  form.innerHTML = `
+    <label class="fc-mission-field">Mission title<input class="fc-mission-title-input" type="text" maxlength="100" required></label>
+    <div class="fc-mission-field-grid">
+      <label class="fc-mission-field">Status<select class="fc-mission-status-select"><option>Active</option><option>Pending</option><option>On Hold</option><option>Completed</option><option>Failed</option></select></label>
+      <label class="fc-mission-field">Priority<select class="fc-mission-priority-select"><option>Low</option><option>Normal</option><option>High</option><option>Critical</option></select></label>
+    </div>
+    <label class="fc-mission-field">Briefing<textarea class="fc-mission-description-input" rows="7" maxlength="8000" placeholder="Mission briefing, objectives, intelligence, or instructions..."></textarea></label>
+    <label class="fc-mission-field">Visibility<select class="fc-mission-visibility-select"><option value="all">Everyone</option><option value="selected">Selected Players</option></select></label>
+    <div class="fc-mission-audience-picker"></div>
+    <button class="fc-create-group-button fc-mission-save" type="submit"><i class="fa-solid fa-floppy-disk"></i><span>Save Mission</span></button>
+  `;
+
+  const titleInput = form.querySelector('.fc-mission-title-input');
+  const statusSelect = form.querySelector('.fc-mission-status-select');
+  const prioritySelect = form.querySelector('.fc-mission-priority-select');
+  const descriptionInput = form.querySelector('.fc-mission-description-input');
+  const visibilitySelect = form.querySelector('.fc-mission-visibility-select');
+  titleInput.value = draft.title;
+  statusSelect.value = draft.status;
+  prioritySelect.value = draft.priority;
+  descriptionInput.value = draft.description;
+  visibilitySelect.value = draft.visibility;
+
+  const syncDraft = () => {
+    draft.title = titleInput.value;
+    draft.status = statusSelect.value;
+    draft.priority = prioritySelect.value;
+    draft.description = descriptionInput.value;
+    draft.visibility = visibilitySelect.value;
+  };
+  [titleInput, statusSelect, prioritySelect, descriptionInput].forEach((el) => el.addEventListener('input', syncDraft));
+  visibilitySelect.addEventListener('change', () => { syncDraft(); renderMissionAudiencePicker(form.querySelector('.fc-mission-audience-picker')); });
+
+  renderMissionAudiencePicker(form.querySelector('.fc-mission-audience-picker'));
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    syncDraft();
+    await saveMissionDraft();
+  });
+  container.appendChild(form);
+
+  if (state.selectedMissionId) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'fc-manager-button fc-mission-delete';
+    del.innerHTML = `<i class="fa-solid fa-trash"></i><span>Delete Mission</span>`;
+    del.addEventListener('click', () => deleteSelectedMission());
+    container.appendChild(del);
+  }
+}
+
+function renderMissionAudiencePicker(container) {
+  container.replaceChildren();
+  if (state.missionDraft.visibility !== 'selected') {
+    const note = document.createElement('div');
+    note.className = 'fc-manager-note';
+    note.textContent = 'This mission will be visible to every player.';
+    container.appendChild(note);
+    return;
+  }
+
+  appendSectionLabel(container, 'Visible to');
+  const users = game.users.contents.filter((user) => !user.isGM);
+  if (!users.length) {
+    const note = document.createElement('div');
+    note.className = 'fc-manager-note';
+    note.textContent = 'No player users are available.';
+    container.appendChild(note);
+    return;
+  }
+
+  for (const user of users) {
+    const row = document.createElement('label');
+    row.className = 'fc-npc-manager-row fc-mission-player-choice';
+    const img = document.createElement('img');
+    img.className = 'fc-contact-avatar';
+    img.src = getUserAvatar(user);
+    img.alt = '';
+    const text = document.createElement('div');
+    text.className = 'fc-contact-text';
+    text.innerHTML = `<div class="fc-contact-name">${escapeMissionText(getUserDisplayName(user))}</div><div class="fc-contact-preview">${user.active ? 'Online' : 'Offline'}</div>`;
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'fc-npc-toggle';
+    checkbox.checked = state.missionDraft.selectedUserIds.has(user.id);
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) state.missionDraft.selectedUserIds.add(user.id);
+      else state.missionDraft.selectedUserIds.delete(user.id);
+    });
+    row.append(img, text, checkbox);
+    container.appendChild(row);
+  }
+}
+
+async function saveMissionDraft() {
+  if (!game.user.isGM) return;
+  const draft = state.missionDraft;
+  const title = draft.title.trim();
+  if (!title) {
+    ui.notifications.warn('Enter a mission title.');
+    return;
+  }
+  const selectedUserIds = [...draft.selectedUserIds].filter((id) => game.users.get(id) && !game.users.get(id).isGM);
+  if (draft.visibility === 'selected' && !selectedUserIds.length) {
+    ui.notifications.warn('Select at least one player for a restricted mission.');
+    return;
+  }
+
+  const existing = state.selectedMissionId ? getMissionById(state.selectedMissionId) : null;
+  const now = Date.now();
+  const data = {
+    schema: 1,
+    id: existing?.data?.id || makeId(),
+    title,
+    description: draft.description.trim(),
+    status: draft.status,
+    priority: draft.priority,
+    visibility: draft.visibility,
+    selectedUserIds: draft.visibility === 'selected' ? selectedUserIds : [],
+    createdAt: existing?.data?.createdAt || now,
+    updatedAt: now,
+    createdByUserId: existing?.data?.createdByUserId || game.user.id,
+    updatedByUserId: game.user.id
+  };
+  const whisper = data.visibility === 'selected' ? uniqueIds([...data.selectedUserIds, ...getGmUserIds()]) : [];
+
+  try {
+    const document = await createChatMessageDocument({
+      content: `[Mission Log] ${formatSafeChatContent(data.title)}`,
+      speaker: { alias: 'Mission Log' },
+      whisper,
+      flags: { [MODULE_ID]: { [MISSION_FLAG]: data } }
+    });
+    if (existing) await existing.document.delete();
+    state.selectedMissionId = data.id;
+    state.missionEditorOpen = false;
+    resetMissionDraft();
+    await markMissionSeen(data.id, data.updatedAt);
+    ui.notifications.info(existing ? 'Mission updated.' : 'Mission added.');
+    renderPhone();
+    return document;
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to save mission`, error);
+    ui.notifications.error('The mission could not be saved. Check the console for details.');
+  }
+}
+
+async function deleteSelectedMission() {
+  if (!game.user.isGM || !state.selectedMissionId) return;
+  const record = getMissionById(state.selectedMissionId);
+  if (!record) return;
+  const confirmed = window.confirm(`Delete "${record.data.title}" from every assigned phone?`);
+  if (!confirmed) return;
+  await record.document.delete();
+  state.selectedMissionId = null;
+  state.missionEditorOpen = false;
+  resetMissionDraft();
+  ui.notifications.info('Mission deleted.');
+  renderPhone();
+}
+
+function getMissionAudienceLabel(data) {
+  if (data.visibility === 'all') return 'All Players';
+  const names = (data.selectedUserIds || []).map((id) => getUserDisplayName(game.users.get(id))).filter(Boolean);
+  if (!names.length) return 'Selected Players';
+  if (names.length <= 3) return names.join(', ');
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+}
+
+function formatMissionDate(timestamp) {
+  return new Date(Number(timestamp) || Date.now()).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function escapeMissionText(value) {
+  const div = document.createElement('div');
+  div.textContent = String(value ?? '');
+  return div.innerHTML;
+}
+
 function isPhoneMessage(message) {
   return Boolean(getPhoneData(message)?.[PHONE_FLAG]);
 }
@@ -1870,6 +2435,11 @@ function makeId() {
 function updateCallButton() {
   const button = state.root?.querySelector(".fc-call-button");
   if (!button) return;
+
+  if (state.app !== "messages") {
+    button.hidden = true;
+    return;
+  }
 
   const context = getCallInitiationContext();
   button.hidden = !context;
@@ -2186,6 +2756,7 @@ function resetCallToHome() {
   clearCallTimer();
   state.call = null;
   state.phoneOpen = true;
+  state.app = "home";
   state.mode = "group";
   state.selectedGroupId = null;
   state.groupCreatorOpen = false;
@@ -2430,12 +3001,16 @@ function getCurrentDirectTargetUserIds() {
 function updateBadges() {
   const groupUnread = [...state.unreadGroups.values()].reduce((sum, value) => sum + value, 0);
   const dmUnread = [...state.unreadDirect.values()].reduce((sum, value) => sum + value, 0);
-  const total = groupUnread + dmUnread;
+  const messageUnread = groupUnread + dmUnread;
+  const missionUnread = getMissionUnreadCount();
+  const total = messageUnread + missionUnread;
 
   setBadge(state.launcher?.querySelector(".fc-launcher-badge"), total);
   if (!state.root) return;
   setBadge(state.root.querySelector(".fc-group-tab-badge"), groupUnread);
   setBadge(state.root.querySelector(".fc-dm-tab-badge"), dmUnread);
+  setBadge(state.root.querySelector(".fc-messages-app-badge"), messageUnread);
+  setBadge(state.root.querySelector(".fc-missions-app-badge"), missionUnread);
 }
 
 function setBadge(element, count) {
