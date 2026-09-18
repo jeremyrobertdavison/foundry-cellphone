@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern-day Foundry VTT campaigns.
 
-Version **1.3.0** adds **Friendpage**, an in-world social-media app built directly into the cellphone Home Screen. Existing messaging, NPC roleplay, typing indicators, calls, and Mission Log features remain available.
+Version **1.3.1** adds clearer group-chat sender identity while retaining **Friendpage**, an in-world social-media app built directly into the cellphone Home Screen. Existing messaging, NPC roleplay, typing indicators, calls, and Mission Log features remain available.
 
 ## Features
 
@@ -17,6 +17,7 @@ Version **1.3.0** adds **Friendpage**, an in-world social-media app built direct
 - Click a post author or wall recipient to jump directly to that profile
 - Persistent Friendpage history stored as module-owned Foundry records and hidden from the normal Foundry chat feed
 - **Messages** app with Party Chat, custom groups, DMs, NPC texting, typing indicators, and calls
+- Group messages identify incoming participants with a compact name + avatar strip; GM-sent NPC messages also show the active NPC identity
 - **Mission Log** app with GM-managed public or restricted assignments
 - GM-triggered calls as NPC Actors
 - Existing message and mission history from earlier releases remains readable
@@ -92,7 +93,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.3.0.zip
+foundry-cellphone-v1.3.1.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

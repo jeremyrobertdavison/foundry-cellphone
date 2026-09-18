@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1
+
+- Added compact sender identity strips to group-chat bubbles.
+- Incoming group messages now show both the sender name and a small character/NPC avatar.
+- GM messages sent as NPCs now show that NPC's name and avatar even though the bubble is outgoing on the GM client.
+- Added sender-avatar data to newly created group messages while retaining fallback support for existing message history.
+- No data migration is required.
+
 ## 1.3.0
 
 - Added **Friendpage**, a public in-world social-media app on the cellphone Home Screen.

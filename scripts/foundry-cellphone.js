@@ -579,6 +579,7 @@ async function createGroupMessage(body) {
     senderType: identity.type,
     senderId: identity.id,
     senderName: identity.name,
+    senderAvatar: identity.type === "npc" ? getActorAvatar(game.actors.get(identity.id)) : getUserAvatar(game.users.get(identity.id)),
     recipientType: null,
     recipientId: null,
     recipientName: null,
@@ -1023,10 +1024,21 @@ function buildMessageBubble(message) {
   const bubble = document.createElement("div");
   bubble.className = "fc-bubble";
 
-  if (state.mode === "group" && !outgoing) {
+  const showGroupIdentity = state.mode === "group" && (!outgoing || data.senderType === "npc");
+  if (showGroupIdentity) {
     const sender = document.createElement("div");
     sender.className = "fc-bubble-sender";
-    sender.textContent = data.senderName || getIdentityName(data.senderType, data.senderId);
+
+    const avatar = document.createElement("img");
+    avatar.className = "fc-bubble-sender-avatar";
+    avatar.src = data.senderAvatar || getIdentityAvatar(data.senderType, data.senderId);
+    avatar.alt = "";
+
+    const name = document.createElement("span");
+    name.className = "fc-bubble-sender-name";
+    name.textContent = data.senderName || getIdentityName(data.senderType, data.senderId);
+
+    sender.append(avatar, name);
     bubble.appendChild(sender);
   }
 
@@ -2850,6 +2862,11 @@ function describeGroupMembers(group) {
 function getIdentityName(type, id) {
   if (type === "npc") return game.actors.get(id)?.name || "NPC";
   return getUserDisplayName(game.users.get(id));
+}
+
+function getIdentityAvatar(type, id) {
+  if (type === "npc") return getActorAvatar(game.actors.get(id));
+  return getUserAvatar(game.users.get(id));
 }
 
 function getUserDisplayName(user) {

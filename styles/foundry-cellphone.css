@@ -297,10 +297,36 @@
 }
 
 .fc-bubble-sender {
-  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  min-width: 0;
   font-size: 9px;
   font-weight: 800;
   color: #9fc1ff;
+}
+
+.fc-bubble-sender-avatar {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255,255,255,.12);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.16);
+}
+
+.fc-bubble-sender-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-message-row.is-outgoing .fc-bubble-sender {
+  justify-content: flex-end;
+  color: rgba(255,255,255,.78);
 }
 
 .fc-bubble-body {
