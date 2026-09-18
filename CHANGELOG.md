@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1
+
+- Fixed Mission Log selection cards being compressed into a single horizontal row by Foundry's global button styling.
+- Mission cards now keep a full-height vertical layout with title, status/priority chips, briefing preview, and audience on separate rows.
+- Long mission titles may wrap to two lines instead of crushing the rest of the card.
+- No mission data migration is required.
+
 ## 1.2.0
 
 - Added a true cellphone **Home Screen** that opens before individual apps.

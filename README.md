@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern-day Foundry VTT campaigns.
 
-Version **1.2.0** introduces a true cellphone **Home Screen** and the first standalone phone app beyond messaging: **Mission Log**. Existing messaging, NPC roleplay, typing indicators, calls, and GM call-as-NPC features remain available through the Messages app.
+Version **1.2.1** includes the Mission Log layout fix and retains a true cellphone **Home Screen** and the first standalone phone app beyond messaging: **Mission Log**. Existing messaging, NPC roleplay, typing indicators, calls, and GM call-as-NPC features remain available through the Messages app.
 
 ## Features
 
@@ -102,7 +102,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.2.0.zip
+foundry-cellphone-v1.2.1.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

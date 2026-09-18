@@ -1099,13 +1099,18 @@
 }
 
 .fc-mission-card {
+  display: block;
   width: 100%;
+  height: auto;
+  min-height: 96px;
   padding: 10px 11px;
   border: 1px solid rgba(255,255,255,.085);
   border-radius: 13px;
   background: rgba(255,255,255,.045);
   color: #fff;
   text-align: left;
+  white-space: normal;
+  line-height: 1.2;
   cursor: pointer;
   font: inherit;
   box-shadow: none;
@@ -1126,9 +1131,12 @@
 .fc-mission-card-title {
   min-width: 0;
   flex: 1;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.2;
   font-size: 12px;
   font-weight: 850;
 }
@@ -1360,4 +1368,16 @@
 
 .fc-mission-delete:hover {
   background: rgba(223,59,55,.16);
+}
+
+/* v1.2.1: keep mission-selection cards vertical inside Foundry's global button styles. */
+.fc-mission-card > .fc-mission-card-top,
+.fc-mission-card > .fc-mission-card-meta,
+.fc-mission-card > .fc-mission-card-preview,
+.fc-mission-card > .fc-mission-card-audience {
+  width: 100%;
+}
+
+.fc-mission-card .fc-mission-card-meta {
+  justify-content: flex-start;
 }
