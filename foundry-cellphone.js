@@ -2,10 +2,13 @@ const MODULE_ID = "foundry-cellphone";
 const PHONE_FLAG = "phoneMessage";
 const MISSION_FLAG = "missionRecord";
 const FRIENDPAGE_FLAG = "friendpageRecord";
+const NOTE_FLAG = "noteRecord";
+const NEWS_FLAG = "newsRecord";
 const NPC_CONTACTS_SETTING = "npcContacts";
 const MISSION_SEEN_SETTING = "missionSeen";
 const FRIENDPAGE_PROFILES_SETTING = "friendpageProfiles";
 const BROWSER_BOOKMARKS_SETTING = "browserBookmarks";
+const ARCADE_STATS_SETTING = "arcadeStats";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -13,6 +16,11 @@ const TYPING_KEEPALIVE_MS = 700;
 const TYPING_STOP_MS = 1500;
 const TYPING_EXPIRE_MS = 3000;
 const CALL_RING_TIMEOUT_MS = 30000;
+const SNAKE_BOARD_SIZE = 14;
+const SNAKE_TICK_MS = 175;
+const MINESWEEPER_SIZE = 8;
+const MINESWEEPER_MINE_COUNT = 10;
+const RUNNER_TICK_MS = 50;
 
 const state = {
   phoneOpen: false,
@@ -40,6 +48,28 @@ const state = {
   browserSearchResults: [],
   selectedBrowserPage: null,
   browserBookmarkManagerOpen: false,
+  selectedNoteId: null,
+  noteEditorOpen: false,
+  noteDraft: { title: "", body: "" },
+  selectedNewsId: null,
+  newsEditorOpen: false,
+  newsDraft: { headline: "", blurb: "", author: "", publisher: "", publishedAt: "" },
+  arcadeGame: "menu",
+  snake: {
+    segments: [],
+    food: null,
+    direction: { x: 1, y: 0 },
+    nextDirection: { x: 1, y: 0 },
+    score: 0,
+    running: false,
+    paused: false,
+    gameOver: false,
+    interval: null
+  },
+  ticTacToe: { board: Array(9).fill(null), turn: "X", status: "playing", aiTimer: null },
+  minesweeper: { cells: [], status: "ready", flagMode: false, minesPlaced: false },
+  runner: { running: false, paused: false, gameOver: false, interval: null, playerY: 0, velocityY: 0, obstacles: [], score: 0, ticks: 0, spawnIn: 34 },
+  guessNumber: { target: Math.floor(Math.random() * 100) + 1, attempts: 0, status: "playing", feedback: "I picked a number from 1 to 100." },
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -111,6 +141,16 @@ Hooks.once("init", () => {
       refreshAll();
     }
   });
+
+  game.settings.register(MODULE_ID, ARCADE_STATS_SETTING, {
+    name: "Arcade Stats",
+    hint: "Local high scores and results for the cellphone Arcade app.",
+    scope: "client",
+    config: false,
+    type: Object,
+    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0 },
+    onChange: () => refreshAll()
+  });
 });
 
 Hooks.once("ready", () => {
@@ -136,6 +176,17 @@ Hooks.on("renderChatMessage", (message, html) => {
 });
 
 Hooks.on("createChatMessage", (message) => {
+  if (isNewsRecord(message)) {
+    refreshAll();
+    return;
+  }
+
+  if (isNoteRecord(message)) {
+    const data = getNoteData(message);
+    if (data?.ownerUserId === game.user?.id) refreshAll();
+    return;
+  }
+
   if (isMissionRecord(message)) {
     const data = getMissionData(message);
     if (data && isMissionVisibleToCurrentUser(data)) refreshAll();
@@ -180,6 +231,17 @@ Hooks.on("createChatMessage", (message) => {
 });
 
 Hooks.on("updateChatMessage", (message) => {
+  if (isNewsRecord(message)) {
+    refreshAll();
+    return;
+  }
+
+  if (isNoteRecord(message)) {
+    const data = getNoteData(message);
+    if (data?.ownerUserId === game.user?.id) refreshAll();
+    return;
+  }
+
   if (isMissionRecord(message)) {
     const data = getMissionData(message);
     if (data && state.phoneOpen && state.app === "missions" && state.selectedMissionId === data.id && !state.missionEditorOpen && isMissionVisibleToCurrentUser(data)) {
@@ -260,6 +322,18 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-browser"><i class="fa-solid fa-compass"></i></span>
               <span class="fc-app-label">Browser</span>
             </button>
+            <button class="fc-app-icon fc-app-icon-notes" type="button" data-app="notes">
+              <span class="fc-app-symbol fc-app-symbol-notes"><i class="fa-solid fa-note-sticky"></i></span>
+              <span class="fc-app-label">Notes</span>
+            </button>
+            <button class="fc-app-icon" type="button" data-app="news">
+              <span class="fc-app-symbol fc-app-symbol-news"><i class="fa-solid fa-newspaper"></i></span>
+              <span class="fc-app-label">News</span>
+            </button>
+            <button class="fc-app-icon fc-app-icon-arcade" type="button" data-app="arcade">
+              <span class="fc-app-symbol fc-app-symbol-arcade"><i class="fa-solid fa-gamepad"></i></span>
+              <span class="fc-app-label">Arcade</span>
+            </button>
           </div>
         </section>
 
@@ -337,6 +411,18 @@ function buildPhone() {
           <section class="fc-browser-view" hidden>
             <div class="fc-browser-content"></div>
           </section>
+
+          <section class="fc-notes-view" hidden>
+            <div class="fc-notes-content"></div>
+          </section>
+
+          <section class="fc-news-view" hidden>
+            <div class="fc-news-content"></div>
+          </section>
+
+          <section class="fc-arcade-view" hidden>
+            <div class="fc-arcade-content"></div>
+          </section>
         </main>
       </div>
 
@@ -383,6 +469,7 @@ function buildPhone() {
 
   setupPhoneDragging(root.querySelector(".fc-phone"), root.querySelector(".fc-drag-handle"));
   window.addEventListener("resize", keepPhoneOnScreen);
+  window.addEventListener("keydown", onArcadeKeydown);
 }
 
 function togglePhone() {
@@ -404,7 +491,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -430,12 +517,24 @@ function openApp(app) {
     state.browserSearchResults = [];
     state.selectedBrowserPage = null;
     state.browserBookmarkManagerOpen = false;
+  } else if (app === 'notes') {
+    state.selectedNoteId = null;
+    state.noteEditorOpen = false;
+    resetNoteDraft();
+  } else if (app === 'news') {
+    state.selectedNewsId = null;
+    state.newsEditorOpen = false;
+    resetNewsDraft();
+  } else if (app === 'arcade') {
+    state.arcadeGame = 'menu';
+    pauseArcadeActionGames();
   }
   renderPhone();
 }
 
 function goHome() {
   stopTyping();
+  pauseArcadeActionGames();
   state.app = 'home';
   state.selectedMissionId = null;
   state.missionEditorOpen = false;
@@ -447,11 +546,18 @@ function goHome() {
   state.browserSearchResults = [];
   state.selectedBrowserPage = null;
   state.browserBookmarkManagerOpen = false;
+  state.selectedNoteId = null;
+  state.noteEditorOpen = false;
+  resetNoteDraft();
+  state.selectedNewsId = null;
+  state.newsEditorOpen = false;
+  resetNewsDraft();
   renderPhone();
 }
 
 function closePhone() {
   stopTyping();
+  pauseArcadeActionGames();
   state.phoneOpen = false;
   if (!state.root) return;
   state.root.classList.remove("is-open");
@@ -478,6 +584,41 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "arcade") {
+    if (state.arcadeGame !== "menu") {
+      pauseArcadeActionGames();
+      state.arcadeGame = "menu";
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
+
+  if (state.app === "news") {
+    if (state.newsEditorOpen) {
+      state.newsEditorOpen = false;
+      state.selectedNewsId = null;
+      resetNewsDraft();
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
+
+  if (state.app === "notes") {
+    if (state.noteEditorOpen) {
+      state.noteEditorOpen = false;
+      state.selectedNoteId = null;
+      resetNoteDraft();
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.app === "browser") {
     if (state.browserBookmarkManagerOpen) {
@@ -870,6 +1011,9 @@ function renderPhone() {
   const missionView = state.root.querySelector(".fc-mission-view");
   const friendpageView = state.root.querySelector(".fc-friendpage-view");
   const browserView = state.root.querySelector(".fc-browser-view");
+  const notesView = state.root.querySelector(".fc-notes-view");
+  const newsView = state.root.querySelector(".fc-news-view");
+  const arcadeView = state.root.querySelector(".fc-arcade-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -883,6 +1027,9 @@ function renderPhone() {
   missionView.hidden = true;
   friendpageView.hidden = true;
   browserView.hidden = true;
+  notesView.hidden = true;
+  newsView.hidden = true;
+  arcadeView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -919,6 +1066,27 @@ function renderPhone() {
   if (state.app === "browser") {
     browserView.hidden = false;
     renderBrowserView();
+    updateBadges();
+    return;
+  }
+
+  if (state.app === "notes") {
+    notesView.hidden = false;
+    renderNotesView();
+    updateBadges();
+    return;
+  }
+
+  if (state.app === "news") {
+    newsView.hidden = false;
+    renderNewsView();
+    updateBadges();
+    return;
+  }
+
+  if (state.app === "arcade") {
+    arcadeView.hidden = false;
+    renderArcadeView();
     updateBadges();
     return;
   }
@@ -973,6 +1141,28 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "arcade") {
+    back.hidden = false;
+    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", guessnumber: "Guess My Number" };
+    title.textContent = arcadeTitles[state.arcadeGame] || "Arcade";
+    subtitle.textContent = state.arcadeGame === "menu" ? "Pick a game" : "Cellphone games";
+    return;
+  }
+
+  if (state.app === "news") {
+    back.hidden = false;
+    title.textContent = state.newsEditorOpen ? (state.selectedNewsId ? "Edit Story" : "New Story") : "News";
+    subtitle.textContent = state.newsEditorOpen ? "GM News Desk" : "Latest headlines";
+    return;
+  }
+
+  if (state.app === "notes") {
+    back.hidden = false;
+    title.textContent = state.noteEditorOpen ? (state.selectedNoteId ? "Edit Note" : "New Note") : "Notes";
+    subtitle.textContent = state.noteEditorOpen ? "Private phone note" : "Private to your account";
+    return;
+  }
 
   if (state.app === "browser") {
     back.hidden = false;
@@ -3238,8 +3428,523 @@ function renderBrowserBookmarkManager(container) {
   container.appendChild(form);
 }
 
+
+// ---------------------------
+// News app
+// ---------------------------
+
+function isNewsRecord(message) {
+  return Boolean(getNewsData(message));
+}
+
+function getNewsData(message) {
+  return message?.getFlag?.(MODULE_ID, NEWS_FLAG) ?? message?.flags?.[MODULE_ID]?.[NEWS_FLAG] ?? null;
+}
+
+function getNewsRecords() {
+  return game.messages.contents
+    .filter(isNewsRecord)
+    .map((document) => ({ document, data: getNewsData(document) }))
+    .filter((record) => Boolean(record.data?.id))
+    .sort((a, b) => String(b.data.publishedAt || '').localeCompare(String(a.data.publishedAt || '')) || Number(b.data.createdAt || 0) - Number(a.data.createdAt || 0));
+}
+
+function getNewsById(id) {
+  return getNewsRecords().find((record) => record.data.id === id) ?? null;
+}
+
+function getLocalDateTimeValue(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function resetNewsDraft(data = null) {
+  state.newsDraft = {
+    headline: data?.headline || '',
+    blurb: data?.blurb || '',
+    author: data?.author || '',
+    publisher: data?.publisher || '',
+    publishedAt: data?.publishedAt || getLocalDateTimeValue()
+  };
+}
+
+function renderNewsView() {
+  const container = state.root.querySelector('.fc-news-content');
+  container.replaceChildren();
+  if (state.newsEditorOpen) renderNewsEditor(container);
+  else renderNewsFeed(container);
+}
+
+function renderNewsFeed(container) {
+  if (game.user?.isGM) {
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'fc-manager-button fc-news-add';
+    add.innerHTML = '<i class="fa-solid fa-plus"></i><span>Add Headline</span>';
+    add.addEventListener('click', () => {
+      state.selectedNewsId = null;
+      resetNewsDraft();
+      state.newsEditorOpen = true;
+      renderPhone();
+    });
+    container.appendChild(add);
+  }
+
+  const records = getNewsRecords();
+  if (!records.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-news-empty';
+    empty.innerHTML = '<i class="fa-regular fa-newspaper"></i><strong>No stories yet</strong><span>Published headlines will appear here.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const record of records) {
+    const { data } = record;
+    const card = document.createElement('article');
+    card.className = 'fc-news-card';
+
+    const top = document.createElement('div');
+    top.className = 'fc-news-card-top';
+    const publisher = document.createElement('div');
+    publisher.className = 'fc-news-publisher';
+    publisher.textContent = data.publisher || 'News';
+    top.appendChild(publisher);
+
+    if (game.user?.isGM) {
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'fc-news-edit';
+      edit.title = 'Edit story';
+      edit.setAttribute('aria-label', `Edit ${data.headline || 'news story'}`);
+      edit.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      edit.addEventListener('click', () => {
+        state.selectedNewsId = data.id;
+        resetNewsDraft(data);
+        state.newsEditorOpen = true;
+        renderPhone();
+      });
+      top.appendChild(edit);
+    }
+
+    const headline = document.createElement('h3');
+    headline.className = 'fc-news-headline';
+    headline.textContent = data.headline || 'Untitled Story';
+
+    const blurb = document.createElement('p');
+    blurb.className = 'fc-news-blurb';
+    blurb.textContent = data.blurb || '';
+    blurb.hidden = !String(data.blurb || '').trim();
+
+    const meta = document.createElement('div');
+    meta.className = 'fc-news-meta';
+    const bits = [];
+    if (String(data.author || '').trim()) bits.push(`By ${data.author}`);
+    if (String(data.publishedAt || '').trim()) bits.push(formatNewsPublication(data.publishedAt));
+    meta.textContent = bits.join(' • ');
+    meta.hidden = bits.length === 0;
+
+    card.append(top, headline, blurb, meta);
+    container.appendChild(card);
+  }
+}
+
+function renderNewsEditor(container) {
+  if (!game.user?.isGM) {
+    state.newsEditorOpen = false;
+    state.selectedNewsId = null;
+    resetNewsDraft();
+    renderPhone();
+    return;
+  }
+
+  const form = document.createElement('form');
+  form.className = 'fc-news-form';
+
+  const helper = document.createElement('div');
+  helper.className = 'fc-news-editor-help';
+  helper.innerHTML = '<i class="fa-solid fa-newspaper"></i><span>Publish a headline to every player\'s News feed.</span>';
+
+  const makeField = (labelText, input) => {
+    const label = document.createElement('label');
+    label.className = 'fc-news-field';
+    label.textContent = labelText;
+    label.appendChild(input);
+    return label;
+  };
+
+  const headlineInput = document.createElement('input');
+  headlineInput.type = 'text';
+  headlineInput.maxLength = 160;
+  headlineInput.placeholder = 'Breaking news headline';
+  headlineInput.value = state.newsDraft.headline;
+
+  const blurbInput = document.createElement('textarea');
+  blurbInput.rows = 5;
+  blurbInput.maxLength = 900;
+  blurbInput.placeholder = 'Short summary of the story...';
+  blurbInput.value = state.newsDraft.blurb;
+
+  const publisherInput = document.createElement('input');
+  publisherInput.type = 'text';
+  publisherInput.maxLength = 100;
+  publisherInput.placeholder = 'Daily Bugle';
+  publisherInput.value = state.newsDraft.publisher;
+
+  const authorInput = document.createElement('input');
+  authorInput.type = 'text';
+  authorInput.maxLength = 100;
+  authorInput.placeholder = 'Ben Urich';
+  authorInput.value = state.newsDraft.author;
+
+  const publishedInput = document.createElement('input');
+  publishedInput.type = 'datetime-local';
+  publishedInput.value = state.newsDraft.publishedAt || getLocalDateTimeValue();
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'fc-create-group-button fc-news-save';
+  save.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>Publish Story</span>';
+
+  form.append(
+    helper,
+    makeField('Headline', headlineInput),
+    makeField('Blurb', blurbInput),
+    makeField('Publisher', publisherInput),
+    makeField('Author', authorInput),
+    makeField('Publication date / time', publishedInput),
+    save
+  );
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    state.newsDraft = {
+      headline: headlineInput.value,
+      blurb: blurbInput.value,
+      publisher: publisherInput.value,
+      author: authorInput.value,
+      publishedAt: publishedInput.value || getLocalDateTimeValue()
+    };
+    save.disabled = true;
+    try {
+      await saveNewsDraft();
+    } finally {
+      save.disabled = false;
+    }
+  });
+  container.appendChild(form);
+
+  if (state.selectedNewsId) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'fc-manager-button fc-news-delete';
+    del.innerHTML = '<i class="fa-solid fa-trash"></i><span>Delete Story</span>';
+    del.addEventListener('click', () => deleteSelectedNews());
+    container.appendChild(del);
+  }
+
+  requestAnimationFrame(() => headlineInput.focus());
+}
+
+async function saveNewsDraft() {
+  if (!game.user?.isGM) return;
+  const headline = String(state.newsDraft.headline || '').trim();
+  if (!headline) {
+    ui.notifications.warn('Enter a headline before publishing.');
+    return;
+  }
+
+  const existing = state.selectedNewsId ? getNewsById(state.selectedNewsId) : null;
+  const now = Date.now();
+  const data = {
+    schema: 1,
+    id: existing?.data?.id || makeId(),
+    headline,
+    blurb: String(state.newsDraft.blurb || '').trim(),
+    author: String(state.newsDraft.author || '').trim(),
+    publisher: String(state.newsDraft.publisher || '').trim(),
+    publishedAt: String(state.newsDraft.publishedAt || getLocalDateTimeValue()),
+    createdAt: existing?.data?.createdAt || now,
+    updatedAt: now,
+    createdByUserId: existing?.data?.createdByUserId || game.user.id
+  };
+
+  try {
+    if (existing) {
+      await existing.document.update({
+        content: `[News] ${formatSafeChatContent(headline)}`,
+        speaker: { alias: data.publisher || 'News' },
+        [`flags.${MODULE_ID}.${NEWS_FLAG}`]: data
+      });
+    } else {
+      await createChatMessageDocument({
+        content: `[News] ${formatSafeChatContent(headline)}`,
+        speaker: { alias: data.publisher || 'News' },
+        flags: { [MODULE_ID]: { [NEWS_FLAG]: data } }
+      });
+    }
+    state.selectedNewsId = null;
+    state.newsEditorOpen = false;
+    resetNewsDraft();
+    ui.notifications.info(existing ? 'News story updated.' : 'News story published.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to save news story`, error);
+    ui.notifications.error('The news story could not be saved. Check the console for details.');
+  }
+}
+
+async function deleteSelectedNews() {
+  if (!game.user?.isGM || !state.selectedNewsId) return;
+  const record = getNewsById(state.selectedNewsId);
+  if (!record) return;
+  const confirmed = window.confirm(`Delete "${record.data.headline || 'Untitled Story'}"?`);
+  if (!confirmed) return;
+  try {
+    await record.document.delete();
+    state.selectedNewsId = null;
+    state.newsEditorOpen = false;
+    resetNewsDraft();
+    ui.notifications.info('News story deleted.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to delete news story`, error);
+    ui.notifications.error('The news story could not be deleted. Check the console for details.');
+  }
+}
+
+function formatNewsPublication(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return String(value || '');
+  const [, year, month, day, hour, minute] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+  return date.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// ---------------------------
+// Notes app
+// ---------------------------
+
+function isNoteRecord(message) {
+  return Boolean(getNoteData(message));
+}
+
+function getNoteData(message) {
+  return message?.getFlag?.(MODULE_ID, NOTE_FLAG) ?? message?.flags?.[MODULE_ID]?.[NOTE_FLAG] ?? null;
+}
+
+function getNoteRecords() {
+  return game.messages.contents
+    .filter(isNoteRecord)
+    .map((document) => ({ document, data: getNoteData(document) }))
+    .filter((record) => record.data?.ownerUserId === game.user?.id)
+    .sort((a, b) => Number(b.data.updatedAt || 0) - Number(a.data.updatedAt || 0));
+}
+
+function getNoteById(id) {
+  return getNoteRecords().find((record) => record.data.id === id) ?? null;
+}
+
+function resetNoteDraft(data = null) {
+  state.noteDraft = {
+    title: data?.title || "",
+    body: data?.body || ""
+  };
+}
+
+function renderNotesView() {
+  const container = state.root.querySelector('.fc-notes-content');
+  container.replaceChildren();
+  if (state.noteEditorOpen) renderNoteEditor(container);
+  else renderNoteList(container);
+}
+
+function renderNoteList(container) {
+  const privacy = document.createElement('div');
+  privacy.className = 'fc-note-privacy';
+  privacy.innerHTML = '<i class="fa-solid fa-lock"></i><span>Your notes are visible only to your Foundry user.</span>';
+  container.appendChild(privacy);
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'fc-manager-button fc-note-add';
+  add.innerHTML = '<i class="fa-solid fa-plus"></i><span>New Note</span>';
+  add.addEventListener('click', () => {
+    state.selectedNoteId = null;
+    resetNoteDraft();
+    state.noteEditorOpen = true;
+    renderPhone();
+  });
+  container.appendChild(add);
+
+  const notes = getNoteRecords();
+  if (!notes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-note-empty';
+    empty.innerHTML = '<i class="fa-regular fa-note-sticky"></i><strong>No notes yet</strong><span>Tap New Note to jot something down.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const record of notes) {
+    const { data } = record;
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'fc-note-card';
+
+    const title = document.createElement('div');
+    title.className = 'fc-note-card-title';
+    title.textContent = data.title || 'Untitled Note';
+
+    const preview = document.createElement('div');
+    preview.className = 'fc-note-card-preview';
+    preview.textContent = truncate(String(data.body || '').replace(/\s+/g, ' ').trim() || 'Empty note', 92);
+
+    const meta = document.createElement('div');
+    meta.className = 'fc-note-card-meta';
+    meta.textContent = `Updated ${formatNoteDate(data.updatedAt || data.createdAt)}`;
+
+    card.append(title, preview, meta);
+    card.addEventListener('click', () => {
+      state.selectedNoteId = data.id;
+      resetNoteDraft(data);
+      state.noteEditorOpen = true;
+      renderPhone();
+    });
+    container.appendChild(card);
+  }
+}
+
+function renderNoteEditor(container) {
+  const form = document.createElement('form');
+  form.className = 'fc-note-form';
+
+  const privacy = document.createElement('div');
+  privacy.className = 'fc-note-privacy';
+  privacy.innerHTML = '<i class="fa-solid fa-lock"></i><span>Private note</span>';
+
+  const titleLabel = document.createElement('label');
+  titleLabel.className = 'fc-note-field';
+  titleLabel.textContent = 'Title';
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.maxLength = 100;
+  titleInput.placeholder = 'Note title';
+  titleInput.value = state.noteDraft.title;
+  titleLabel.appendChild(titleInput);
+
+  const bodyLabel = document.createElement('label');
+  bodyLabel.className = 'fc-note-field';
+  bodyLabel.textContent = 'Note';
+  const bodyInput = document.createElement('textarea');
+  bodyInput.rows = 11;
+  bodyInput.maxLength = 12000;
+  bodyInput.placeholder = 'Write your note...';
+  bodyInput.value = state.noteDraft.body;
+  bodyLabel.appendChild(bodyInput);
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'fc-create-group-button fc-note-save';
+  save.innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>Save Note</span>';
+
+  form.append(privacy, titleLabel, bodyLabel, save);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    state.noteDraft.title = titleInput.value;
+    state.noteDraft.body = bodyInput.value;
+    save.disabled = true;
+    try {
+      await saveNoteDraft();
+    } finally {
+      save.disabled = false;
+    }
+  });
+  container.appendChild(form);
+
+  if (state.selectedNoteId) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'fc-manager-button fc-note-delete';
+    del.innerHTML = '<i class="fa-solid fa-trash"></i><span>Delete Note</span>';
+    del.addEventListener('click', () => deleteSelectedNote());
+    container.appendChild(del);
+  }
+
+  requestAnimationFrame(() => (state.selectedNoteId ? bodyInput : titleInput).focus());
+}
+
+async function saveNoteDraft() {
+  const body = String(state.noteDraft.body || '').trim();
+  let title = String(state.noteDraft.title || '').trim();
+  if (!title && !body) {
+    ui.notifications.warn('Write something before saving the note.');
+    return;
+  }
+  if (!title) title = truncate(body.split(/\r?\n/)[0] || 'Untitled Note', 60);
+
+  const existing = state.selectedNoteId ? getNoteById(state.selectedNoteId) : null;
+  const now = Date.now();
+  const data = {
+    schema: 1,
+    id: existing?.data?.id || makeId(),
+    ownerUserId: game.user.id,
+    title,
+    body: String(state.noteDraft.body || ''),
+    createdAt: existing?.data?.createdAt || now,
+    updatedAt: now
+  };
+
+  try {
+    if (existing) {
+      await existing.document.update({
+        content: `[Phone Note] ${formatSafeChatContent(title)}`,
+        [`flags.${MODULE_ID}.${NOTE_FLAG}`]: data
+      });
+    } else {
+      await createChatMessageDocument({
+        content: `[Phone Note] ${formatSafeChatContent(title)}`,
+        speaker: { alias: 'Notes' },
+        whisper: [game.user.id],
+        flags: { [MODULE_ID]: { [NOTE_FLAG]: data } }
+      });
+    }
+    state.selectedNoteId = null;
+    state.noteEditorOpen = false;
+    resetNoteDraft();
+    ui.notifications.info(existing ? 'Note updated.' : 'Note saved.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to save note`, error);
+    ui.notifications.error('The note could not be saved. Check the console for details.');
+  }
+}
+
+async function deleteSelectedNote() {
+  if (!state.selectedNoteId) return;
+  const record = getNoteById(state.selectedNoteId);
+  if (!record) return;
+  const confirmed = window.confirm(`Delete "${record.data.title || 'Untitled Note'}"?`);
+  if (!confirmed) return;
+  try {
+    await record.document.delete();
+    state.selectedNoteId = null;
+    state.noteEditorOpen = false;
+    resetNoteDraft();
+    ui.notifications.info('Note deleted.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to delete note`, error);
+    ui.notifications.error('The note could not be deleted. Check the console for details.');
+  }
+}
+
+function formatNoteDate(timestamp) {
+  return new Date(Number(timestamp) || Date.now()).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 function isInternalPhoneRecord(message) {
-  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message);
+  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message) || isNoteRecord(message) || isNewsRecord(message);
 }
 
 function isMissionRecord(message) {
@@ -3866,6 +4571,851 @@ function makeId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+
+// ---------------------------
+// Arcade app: Snake + Tic Tac Toe
+// ---------------------------
+
+function getArcadeStats() {
+  const raw = game.settings.get(MODULE_ID, ARCADE_STATS_SETTING) || {};
+  return {
+    snakeBest: Number(raw.snakeBest || 0),
+    ticTacToeWins: Number(raw.ticTacToeWins || 0),
+    ticTacToeLosses: Number(raw.ticTacToeLosses || 0),
+    ticTacToeDraws: Number(raw.ticTacToeDraws || 0),
+    minesweeperWins: Number(raw.minesweeperWins || 0),
+    runnerBest: Number(raw.runnerBest || 0),
+    guessNumberWins: Number(raw.guessNumberWins || 0),
+    guessNumberBestAttempts: Number(raw.guessNumberBestAttempts || 0)
+  };
+}
+
+async function saveArcadeStats(patch) {
+  const next = { ...getArcadeStats(), ...patch };
+  try {
+    await game.settings.set(MODULE_ID, ARCADE_STATS_SETTING, next);
+  } catch (error) {
+    console.warn(`${MODULE_ID} | Could not save Arcade stats`, error);
+  }
+}
+
+function renderArcadeView() {
+  const container = state.root.querySelector('.fc-arcade-content');
+  if (!container) return;
+  container.replaceChildren();
+
+  if (state.arcadeGame === 'snake') {
+    renderSnakeGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'tictactoe') {
+    renderTicTacToe(container);
+    return;
+  }
+  if (state.arcadeGame === 'minesweeper') {
+    renderMinesweeper(container);
+    return;
+  }
+  if (state.arcadeGame === 'runner') {
+    renderRunnerGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'guessnumber') {
+    renderGuessNumber(container);
+    return;
+  }
+  renderArcadeMenu(container);
+}
+
+function renderArcadeMenu(container) {
+  const intro = document.createElement('div');
+  intro.className = 'fc-arcade-intro';
+  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Five quick games for downtime between scenes.</span></div>';
+  container.appendChild(intro);
+
+  const stats = getArcadeStats();
+  const grid = document.createElement('div');
+  grid.className = 'fc-arcade-menu';
+
+  const snake = document.createElement('button');
+  snake.type = 'button';
+  snake.className = 'fc-arcade-game-card';
+  snake.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-snake"><i class="fa-solid fa-staff-snake"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Snake</strong><small>Best score: ${stats.snakeBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  snake.addEventListener('click', () => {
+    state.arcadeGame = 'snake';
+    if (!state.snake.segments.length || state.snake.gameOver) resetSnakeGame();
+    renderPhone();
+  });
+
+  const ttt = document.createElement('button');
+  ttt.type = 'button';
+  ttt.className = 'fc-arcade-game-card';
+  ttt.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-ttt"><i class="fa-solid fa-table-cells-large"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Tic Tac Toe</strong><small>${stats.ticTacToeWins}W · ${stats.ticTacToeLosses}L · ${stats.ticTacToeDraws}D</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  ttt.addEventListener('click', () => {
+    state.arcadeGame = 'tictactoe';
+    if (!state.ticTacToe.board?.length) resetTicTacToe();
+    renderPhone();
+  });
+
+  const mines = document.createElement('button');
+  mines.type = 'button';
+  mines.className = 'fc-arcade-game-card';
+  mines.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-mines"><i class="fa-solid fa-bomb"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Minesweeper</strong><small>${stats.minesweeperWins} cleared boards</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  mines.addEventListener('click', () => {
+    state.arcadeGame = 'minesweeper';
+    if (!state.minesweeper.cells.length) resetMinesweeper();
+    renderPhone();
+  });
+
+  const runner = document.createElement('button');
+  runner.type = 'button';
+  runner.className = 'fc-arcade-game-card';
+  runner.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-runner"><i class="fa-solid fa-person-running"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Runner</strong><small>Best distance: ${stats.runnerBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  runner.addEventListener('click', () => {
+    state.arcadeGame = 'runner';
+    if (state.runner.gameOver) resetRunnerGame();
+    renderPhone();
+  });
+
+  const guess = document.createElement('button');
+  guess.type = 'button';
+  guess.className = 'fc-arcade-game-card';
+  const guessBest = stats.guessNumberBestAttempts ? `Best: ${stats.guessNumberBestAttempts} guesses` : `${stats.guessNumberWins} wins`;
+  guess.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-guess"><i class="fa-solid fa-hashtag"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Guess My Number</strong><small>${guessBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  guess.addEventListener('click', () => {
+    state.arcadeGame = 'guessnumber';
+    renderPhone();
+  });
+
+  grid.append(snake, ttt, mines, runner, guess);
+  container.appendChild(grid);
+}
+
+function pauseArcadeActionGames() {
+  pauseSnakeGame();
+  pauseRunnerGame();
+}
+
+function resetSnakeGame() {
+  stopSnakeInterval();
+  const mid = Math.floor(SNAKE_BOARD_SIZE / 2);
+  state.snake.segments = [
+    { x: mid, y: mid },
+    { x: mid - 1, y: mid },
+    { x: mid - 2, y: mid }
+  ];
+  state.snake.direction = { x: 1, y: 0 };
+  state.snake.nextDirection = { x: 1, y: 0 };
+  state.snake.score = 0;
+  state.snake.running = false;
+  state.snake.paused = false;
+  state.snake.gameOver = false;
+  placeSnakeFood();
+}
+
+function placeSnakeFood() {
+  const occupied = new Set(state.snake.segments.map((p) => `${p.x},${p.y}`));
+  const available = [];
+  for (let y = 0; y < SNAKE_BOARD_SIZE; y++) {
+    for (let x = 0; x < SNAKE_BOARD_SIZE; x++) {
+      if (!occupied.has(`${x},${y}`)) available.push({ x, y });
+    }
+  }
+  state.snake.food = available.length ? available[Math.floor(Math.random() * available.length)] : null;
+}
+
+function startSnakeGame() {
+  if (state.snake.gameOver) resetSnakeGame();
+  state.snake.running = true;
+  state.snake.paused = false;
+  stopSnakeInterval();
+  state.snake.interval = window.setInterval(snakeStep, SNAKE_TICK_MS);
+  updateSnakeBoard();
+}
+
+function pauseSnakeGame() {
+  if (!state.snake) return;
+  if (state.snake.running) {
+    state.snake.running = false;
+    state.snake.paused = true;
+  }
+  stopSnakeInterval();
+  if (state.phoneOpen && state.app === 'arcade' && state.arcadeGame === 'snake' && !state.call) updateSnakeBoard();
+}
+
+function stopSnakeInterval() {
+  if (state.snake?.interval) {
+    window.clearInterval(state.snake.interval);
+    state.snake.interval = null;
+  }
+}
+
+function setSnakeDirection(x, y) {
+  if (state.snake.gameOver) return;
+  const current = state.snake.direction;
+  if (current.x + x === 0 && current.y + y === 0) return;
+  state.snake.nextDirection = { x, y };
+  if (!state.snake.running && !state.snake.paused) startSnakeGame();
+}
+
+function snakeStep() {
+  if (!state.snake.running || state.call) return;
+  const dir = state.snake.nextDirection;
+  state.snake.direction = { ...dir };
+  const head = state.snake.segments[0];
+  const next = { x: head.x + dir.x, y: head.y + dir.y };
+  const hitsWall = next.x < 0 || next.y < 0 || next.x >= SNAKE_BOARD_SIZE || next.y >= SNAKE_BOARD_SIZE;
+  const eating = Boolean(state.snake.food && next.x === state.snake.food.x && next.y === state.snake.food.y);
+  const bodyToCheck = eating ? state.snake.segments : state.snake.segments.slice(0, -1);
+  const hitsSelf = bodyToCheck.some((p) => p.x === next.x && p.y === next.y);
+
+  if (hitsWall || hitsSelf) {
+    finishSnakeGame();
+    return;
+  }
+
+  state.snake.segments.unshift(next);
+  if (eating) {
+    state.snake.score += 1;
+    placeSnakeFood();
+  } else {
+    state.snake.segments.pop();
+  }
+  updateSnakeBoard();
+}
+
+function finishSnakeGame() {
+  state.snake.running = false;
+  state.snake.paused = false;
+  state.snake.gameOver = true;
+  stopSnakeInterval();
+  const stats = getArcadeStats();
+  if (state.snake.score > stats.snakeBest) void saveArcadeStats({ snakeBest: state.snake.score });
+  updateSnakeBoard();
+}
+
+function renderSnakeGame(container) {
+  if (!state.snake.segments.length) resetSnakeGame();
+  const stats = getArcadeStats();
+  const shell = document.createElement('div');
+  shell.className = 'fc-snake-shell';
+  shell.innerHTML = `
+    <div class="fc-arcade-scorebar">
+      <span>Score <strong class="fc-snake-score">${state.snake.score}</strong></span>
+      <span>Best <strong class="fc-snake-best">${Math.max(stats.snakeBest, state.snake.score)}</strong></span>
+    </div>
+    <div class="fc-snake-board" role="img" aria-label="Snake game board"></div>
+    <div class="fc-snake-message"></div>
+    <div class="fc-snake-controls">
+      <span></span><button type="button" data-dir="up" aria-label="Move up"><i class="fa-solid fa-chevron-up"></i></button><span></span>
+      <button type="button" data-dir="left" aria-label="Move left"><i class="fa-solid fa-chevron-left"></i></button>
+      <button type="button" class="fc-snake-pause" aria-label="Pause or resume"><i class="fa-solid fa-play"></i></button>
+      <button type="button" data-dir="right" aria-label="Move right"><i class="fa-solid fa-chevron-right"></i></button>
+      <span></span><button type="button" data-dir="down" aria-label="Move down"><i class="fa-solid fa-chevron-down"></i></button><span></span>
+    </div>
+    <button type="button" class="fc-arcade-secondary fc-snake-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+  `;
+  container.appendChild(shell);
+
+  const board = shell.querySelector('.fc-snake-board');
+  for (let i = 0; i < SNAKE_BOARD_SIZE * SNAKE_BOARD_SIZE; i++) {
+    const cell = document.createElement('span');
+    cell.className = 'fc-snake-cell';
+    board.appendChild(cell);
+  }
+
+  const directions = { up: [0,-1], down: [0,1], left: [-1,0], right: [1,0] };
+  shell.querySelectorAll('[data-dir]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const [x,y] = directions[button.dataset.dir];
+      setSnakeDirection(x,y);
+    });
+  });
+  shell.querySelector('.fc-snake-pause').addEventListener('click', () => {
+    if (state.snake.gameOver) startSnakeGame();
+    else if (state.snake.running) pauseSnakeGame();
+    else startSnakeGame();
+  });
+  shell.querySelector('.fc-snake-new').addEventListener('click', () => {
+    resetSnakeGame();
+    updateSnakeBoard();
+  });
+  updateSnakeBoard();
+}
+
+function updateSnakeBoard() {
+  const board = state.root?.querySelector('.fc-snake-board');
+  if (!board) return;
+  const cells = [...board.children];
+  for (const cell of cells) cell.className = 'fc-snake-cell';
+  for (let i = 0; i < state.snake.segments.length; i++) {
+    const p = state.snake.segments[i];
+    const cell = cells[p.y * SNAKE_BOARD_SIZE + p.x];
+    if (cell) cell.classList.add(i === 0 ? 'is-head' : 'is-snake');
+  }
+  if (state.snake.food) {
+    const foodCell = cells[state.snake.food.y * SNAKE_BOARD_SIZE + state.snake.food.x];
+    foodCell?.classList.add('is-food');
+  }
+  const score = state.root?.querySelector('.fc-snake-score');
+  const best = state.root?.querySelector('.fc-snake-best');
+  if (score) score.textContent = String(state.snake.score);
+  if (best) best.textContent = String(Math.max(getArcadeStats().snakeBest, state.snake.score));
+  const message = state.root?.querySelector('.fc-snake-message');
+  if (message) {
+    if (state.snake.gameOver) message.textContent = `Game over — score ${state.snake.score}`;
+    else if (state.snake.paused) message.textContent = 'Paused';
+    else if (!state.snake.running) message.textContent = 'Use arrows / WASD or tap a direction to start';
+    else message.textContent = '';
+  }
+  const pause = state.root?.querySelector('.fc-snake-pause i');
+  if (pause) pause.className = `fa-solid ${state.snake.running ? 'fa-pause' : 'fa-play'}`;
+}
+
+function onArcadeKeydown(event) {
+  if (!state.phoneOpen || state.call || state.app !== 'arcade') return;
+  const tag = event.target?.tagName?.toLowerCase();
+  if (['input','textarea','select'].includes(tag)) return;
+
+  if (state.arcadeGame === 'snake') {
+    const keys = {
+      ArrowUp: [0,-1], w: [0,-1], W: [0,-1],
+      ArrowDown: [0,1], s: [0,1], S: [0,1],
+      ArrowLeft: [-1,0], a: [-1,0], A: [-1,0],
+      ArrowRight: [1,0], d: [1,0], D: [1,0]
+    };
+    if (keys[event.key]) {
+      event.preventDefault();
+      setSnakeDirection(...keys[event.key]);
+    } else if (event.key === ' ') {
+      event.preventDefault();
+      if (state.snake.running) pauseSnakeGame();
+      else startSnakeGame();
+    }
+    return;
+  }
+
+  if (state.arcadeGame === 'runner' && [' ', 'ArrowUp', 'w', 'W'].includes(event.key)) {
+    event.preventDefault();
+    jumpRunner();
+  }
+}
+
+const TTT_LINES = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+function resetTicTacToe() {
+  if (state.ticTacToe.aiTimer) window.clearTimeout(state.ticTacToe.aiTimer);
+  state.ticTacToe.board = Array(9).fill(null);
+  state.ticTacToe.turn = 'X';
+  state.ticTacToe.status = 'playing';
+  state.ticTacToe.aiTimer = null;
+}
+
+function getTicTacToeWinner(board = state.ticTacToe.board) {
+  for (const line of TTT_LINES) {
+    const [a,b,c] = line;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) return { mark: board[a], line };
+  }
+  if (board.every(Boolean)) return { mark: 'draw', line: [] };
+  return null;
+}
+
+function renderTicTacToe(container) {
+  const stats = getArcadeStats();
+  const shell = document.createElement('div');
+  shell.className = 'fc-ttt-shell';
+  shell.innerHTML = `
+    <div class="fc-ttt-stats"><span>${stats.ticTacToeWins} Wins</span><span>${stats.ticTacToeLosses} Losses</span><span>${stats.ticTacToeDraws} Draws</span></div>
+    <div class="fc-ttt-player-row"><span class="is-you">You are X</span><span>Phone is O</span></div>
+    <div class="fc-ttt-board" role="grid" aria-label="Tic Tac Toe board"></div>
+    <div class="fc-ttt-status"></div>
+    <button type="button" class="fc-arcade-primary fc-ttt-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+  `;
+  container.appendChild(shell);
+  const board = shell.querySelector('.fc-ttt-board');
+  for (let i = 0; i < 9; i++) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'fc-ttt-cell';
+    button.dataset.index = String(i);
+    button.setAttribute('role', 'gridcell');
+    button.addEventListener('click', () => makePlayerTicTacToeMove(i));
+    board.appendChild(button);
+  }
+  shell.querySelector('.fc-ttt-new').addEventListener('click', () => {
+    resetTicTacToe();
+    renderPhone();
+  });
+  updateTicTacToeBoard();
+}
+
+function makePlayerTicTacToeMove(index) {
+  if (state.ticTacToe.status !== 'playing' || state.ticTacToe.turn !== 'X' || state.ticTacToe.board[index]) return;
+  state.ticTacToe.board[index] = 'X';
+  const result = getTicTacToeWinner();
+  if (result) {
+    finishTicTacToe(result);
+    return;
+  }
+  state.ticTacToe.turn = 'O';
+  updateTicTacToeBoard();
+  state.ticTacToe.aiTimer = window.setTimeout(makeTicTacToeAiMove, 350);
+}
+
+function makeTicTacToeAiMove() {
+  state.ticTacToe.aiTimer = null;
+  if (state.ticTacToe.status !== 'playing' || state.ticTacToe.turn !== 'O') return;
+  const move = chooseTicTacToeAiMove();
+  if (move == null) return;
+  state.ticTacToe.board[move] = 'O';
+  const result = getTicTacToeWinner();
+  if (result) {
+    finishTicTacToe(result);
+    return;
+  }
+  state.ticTacToe.turn = 'X';
+  updateTicTacToeBoard();
+}
+
+function chooseTicTacToeAiMove() {
+  const board = state.ticTacToe.board;
+  const empty = board.map((v,i) => v ? null : i).filter((v) => v != null);
+  const findMove = (mark) => {
+    for (const i of empty) {
+      const test = [...board];
+      test[i] = mark;
+      if (getTicTacToeWinner(test)?.mark === mark) return i;
+    }
+    return null;
+  };
+  const win = findMove('O');
+  if (win != null) return win;
+  const block = findMove('X');
+  if (block != null) return block;
+  if (!board[4]) return 4;
+  const corners = [0,2,6,8].filter((i) => !board[i]);
+  if (corners.length) return corners[Math.floor(Math.random() * corners.length)];
+  return empty.length ? empty[Math.floor(Math.random() * empty.length)] : null;
+}
+
+function finishTicTacToe(result) {
+  state.ticTacToe.status = result.mark;
+  state.ticTacToe.turn = null;
+  const stats = getArcadeStats();
+  if (result.mark === 'X') void saveArcadeStats({ ticTacToeWins: stats.ticTacToeWins + 1 });
+  else if (result.mark === 'O') void saveArcadeStats({ ticTacToeLosses: stats.ticTacToeLosses + 1 });
+  else void saveArcadeStats({ ticTacToeDraws: stats.ticTacToeDraws + 1 });
+  updateTicTacToeBoard(result.line);
+}
+
+function updateTicTacToeBoard(winningLine = null) {
+  const cells = [...(state.root?.querySelectorAll('.fc-ttt-cell') || [])];
+  const result = getTicTacToeWinner();
+  const line = winningLine || result?.line || [];
+  cells.forEach((cell, index) => {
+    const mark = state.ticTacToe.board[index];
+    cell.textContent = mark || '';
+    cell.classList.toggle('is-x', mark === 'X');
+    cell.classList.toggle('is-o', mark === 'O');
+    cell.classList.toggle('is-win', line.includes(index));
+    cell.disabled = Boolean(mark) || state.ticTacToe.status !== 'playing' || state.ticTacToe.turn !== 'X';
+  });
+  const status = state.root?.querySelector('.fc-ttt-status');
+  if (!status) return;
+  if (state.ticTacToe.status === 'X') status.textContent = 'You win!';
+  else if (state.ticTacToe.status === 'O') status.textContent = 'The phone wins.';
+  else if (state.ticTacToe.status === 'draw') status.textContent = 'Draw game.';
+  else status.textContent = state.ticTacToe.turn === 'X' ? 'Your turn' : 'Phone is thinking…';
+}
+
+
+// ---------------------------
+// Minesweeper
+// ---------------------------
+
+function resetMinesweeper() {
+  state.minesweeper.cells = Array.from({ length: MINESWEEPER_SIZE * MINESWEEPER_SIZE }, () => ({ mine: false, revealed: false, flagged: false, adjacent: 0 }));
+  state.minesweeper.status = 'ready';
+  state.minesweeper.flagMode = false;
+  state.minesweeper.minesPlaced = false;
+}
+
+function placeMinesweeperMines(excludedIndex) {
+  const candidates = Array.from({ length: MINESWEEPER_SIZE * MINESWEEPER_SIZE }, (_, i) => i).filter((i) => i !== excludedIndex);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  for (const index of candidates.slice(0, MINESWEEPER_MINE_COUNT)) state.minesweeper.cells[index].mine = true;
+  for (let i = 0; i < state.minesweeper.cells.length; i++) {
+    if (state.minesweeper.cells[i].mine) continue;
+    state.minesweeper.cells[i].adjacent = getMinesweeperNeighbors(i).filter((n) => state.minesweeper.cells[n].mine).length;
+  }
+  state.minesweeper.minesPlaced = true;
+}
+
+function getMinesweeperNeighbors(index) {
+  const x = index % MINESWEEPER_SIZE;
+  const y = Math.floor(index / MINESWEEPER_SIZE);
+  const out = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx >= 0 && ny >= 0 && nx < MINESWEEPER_SIZE && ny < MINESWEEPER_SIZE) out.push(ny * MINESWEEPER_SIZE + nx);
+    }
+  }
+  return out;
+}
+
+function revealMinesweeperCell(index) {
+  if (state.minesweeper.status === 'won' || state.minesweeper.status === 'lost') return;
+  const cell = state.minesweeper.cells[index];
+  if (!cell || cell.flagged || cell.revealed) return;
+  if (!state.minesweeper.minesPlaced) placeMinesweeperMines(index);
+  state.minesweeper.status = 'playing';
+  if (cell.mine) {
+    cell.revealed = true;
+    state.minesweeper.status = 'lost';
+    for (const c of state.minesweeper.cells) if (c.mine) c.revealed = true;
+    updateMinesweeperBoard();
+    return;
+  }
+
+  const queue = [index];
+  const seen = new Set();
+  while (queue.length) {
+    const current = queue.shift();
+    if (seen.has(current)) continue;
+    seen.add(current);
+    const currentCell = state.minesweeper.cells[current];
+    if (!currentCell || currentCell.flagged || currentCell.mine) continue;
+    currentCell.revealed = true;
+    if (currentCell.adjacent === 0) {
+      for (const neighbor of getMinesweeperNeighbors(current)) {
+        const neighborCell = state.minesweeper.cells[neighbor];
+        if (neighborCell && !neighborCell.revealed && !neighborCell.flagged && !neighborCell.mine) queue.push(neighbor);
+      }
+    }
+  }
+
+  const safeRemaining = state.minesweeper.cells.some((c) => !c.mine && !c.revealed);
+  if (!safeRemaining) {
+    state.minesweeper.status = 'won';
+    const stats = getArcadeStats();
+    void saveArcadeStats({ minesweeperWins: stats.minesweeperWins + 1 });
+  }
+  updateMinesweeperBoard();
+}
+
+function toggleMinesweeperFlag(index) {
+  if (['won','lost'].includes(state.minesweeper.status)) return;
+  const cell = state.minesweeper.cells[index];
+  if (!cell || cell.revealed) return;
+  cell.flagged = !cell.flagged;
+  updateMinesweeperBoard();
+}
+
+function renderMinesweeper(container) {
+  if (!state.minesweeper.cells.length) resetMinesweeper();
+  const shell = document.createElement('div');
+  shell.className = 'fc-mines-shell';
+  shell.innerHTML = `
+    <div class="fc-arcade-scorebar"><span>Mines <strong>${MINESWEEPER_MINE_COUNT}</strong></span><span>Flags <strong class="fc-mines-flags">0</strong></span></div>
+    <div class="fc-mines-board" role="grid" aria-label="Minesweeper board"></div>
+    <div class="fc-mines-status"></div>
+    <div class="fc-mines-actions">
+      <button type="button" class="fc-arcade-secondary fc-mines-flag-mode"><i class="fa-solid fa-flag"></i> Flag Mode: Off</button>
+      <button type="button" class="fc-arcade-primary fc-mines-new"><i class="fa-solid fa-rotate-right"></i> New Board</button>
+    </div>
+  `;
+  container.appendChild(shell);
+  const board = shell.querySelector('.fc-mines-board');
+  state.minesweeper.cells.forEach((_, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'fc-mines-cell';
+    button.dataset.index = String(index);
+    button.addEventListener('click', () => state.minesweeper.flagMode ? toggleMinesweeperFlag(index) : revealMinesweeperCell(index));
+    button.addEventListener('contextmenu', (event) => { event.preventDefault(); toggleMinesweeperFlag(index); });
+    board.appendChild(button);
+  });
+  shell.querySelector('.fc-mines-flag-mode').addEventListener('click', () => {
+    state.minesweeper.flagMode = !state.minesweeper.flagMode;
+    updateMinesweeperBoard();
+  });
+  shell.querySelector('.fc-mines-new').addEventListener('click', () => { resetMinesweeper(); renderPhone(); });
+  updateMinesweeperBoard();
+}
+
+function updateMinesweeperBoard() {
+  const cells = [...(state.root?.querySelectorAll('.fc-mines-cell') || [])];
+  cells.forEach((button, index) => {
+    const cell = state.minesweeper.cells[index];
+    button.className = 'fc-mines-cell';
+    button.textContent = '';
+    if (cell?.revealed) {
+      button.classList.add('is-revealed');
+      if (cell.mine) {
+        button.classList.add('is-mine');
+        button.innerHTML = '<i class="fa-solid fa-bomb"></i>';
+      } else if (cell.adjacent) {
+        button.textContent = String(cell.adjacent);
+        button.classList.add(`n${cell.adjacent}`);
+      }
+    } else if (cell?.flagged) {
+      button.classList.add('is-flagged');
+      button.innerHTML = '<i class="fa-solid fa-flag"></i>';
+    }
+  });
+  const flags = state.minesweeper.cells.filter((c) => c.flagged).length;
+  const flagsEl = state.root?.querySelector('.fc-mines-flags');
+  if (flagsEl) flagsEl.textContent = String(flags);
+  const status = state.root?.querySelector('.fc-mines-status');
+  if (status) {
+    status.textContent = state.minesweeper.status === 'won' ? 'Board cleared!' : state.minesweeper.status === 'lost' ? 'Boom! Try another board.' : 'Tap cells to reveal. Use Flag Mode or right-click to flag.';
+  }
+  const flagMode = state.root?.querySelector('.fc-mines-flag-mode');
+  if (flagMode) {
+    flagMode.classList.toggle('is-active', state.minesweeper.flagMode);
+    flagMode.innerHTML = `<i class="fa-solid fa-flag"></i> Flag Mode: ${state.minesweeper.flagMode ? 'On' : 'Off'}`;
+  }
+}
+
+// ---------------------------
+// Runner
+// ---------------------------
+
+function resetRunnerGame() {
+  stopRunnerInterval();
+  state.runner.running = false;
+  state.runner.paused = false;
+  state.runner.gameOver = false;
+  state.runner.playerY = 0;
+  state.runner.velocityY = 0;
+  state.runner.obstacles = [];
+  state.runner.score = 0;
+  state.runner.ticks = 0;
+  state.runner.spawnIn = 30 + Math.floor(Math.random() * 20);
+}
+
+function startRunnerGame() {
+  if (state.runner.gameOver) resetRunnerGame();
+  state.runner.running = true;
+  state.runner.paused = false;
+  stopRunnerInterval();
+  state.runner.interval = window.setInterval(runnerStep, RUNNER_TICK_MS);
+  updateRunnerBoard();
+}
+
+function pauseRunnerGame() {
+  if (!state.runner) return;
+  if (state.runner.running) {
+    state.runner.running = false;
+    state.runner.paused = true;
+  }
+  stopRunnerInterval();
+  if (state.phoneOpen && state.app === 'arcade' && state.arcadeGame === 'runner' && !state.call) updateRunnerBoard();
+}
+
+function stopRunnerInterval() {
+  if (state.runner?.interval) {
+    window.clearInterval(state.runner.interval);
+    state.runner.interval = null;
+  }
+}
+
+function jumpRunner() {
+  if (state.runner.gameOver) resetRunnerGame();
+  if (!state.runner.running) startRunnerGame();
+  if (state.runner.playerY <= 0.5) state.runner.velocityY = 8.2;
+}
+
+function runnerStep() {
+  if (!state.runner.running || state.call) return;
+  state.runner.ticks += 1;
+  state.runner.score = Math.floor(state.runner.ticks / 4);
+  state.runner.velocityY -= 0.72;
+  state.runner.playerY += state.runner.velocityY;
+  if (state.runner.playerY < 0) {
+    state.runner.playerY = 0;
+    state.runner.velocityY = 0;
+  }
+
+  state.runner.spawnIn -= 1;
+  if (state.runner.spawnIn <= 0) {
+    state.runner.obstacles.push({ x: 106, width: 7 + Math.random() * 3, height: 13 + Math.random() * 8 });
+    const difficulty = Math.min(12, Math.floor(state.runner.score / 20));
+    state.runner.spawnIn = Math.max(22, 43 - difficulty) + Math.floor(Math.random() * 18);
+  }
+  const speed = 2.2 + Math.min(1.6, state.runner.score / 150);
+  for (const obstacle of state.runner.obstacles) obstacle.x -= speed;
+  state.runner.obstacles = state.runner.obstacles.filter((obstacle) => obstacle.x > -12);
+
+  const playerLeft = 14;
+  const playerRight = 23;
+  const playerBottom = state.runner.playerY;
+  const playerTop = playerBottom + 18;
+  const hit = state.runner.obstacles.some((obstacle) => {
+    const obstacleLeft = obstacle.x;
+    const obstacleRight = obstacle.x + obstacle.width;
+    return playerRight > obstacleLeft && playerLeft < obstacleRight && playerBottom < obstacle.height && playerTop > 0;
+  });
+  if (hit) {
+    finishRunnerGame();
+    return;
+  }
+  updateRunnerBoard();
+}
+
+function finishRunnerGame() {
+  state.runner.running = false;
+  state.runner.paused = false;
+  state.runner.gameOver = true;
+  stopRunnerInterval();
+  const stats = getArcadeStats();
+  if (state.runner.score > stats.runnerBest) void saveArcadeStats({ runnerBest: state.runner.score });
+  updateRunnerBoard();
+}
+
+function renderRunnerGame(container) {
+  const stats = getArcadeStats();
+  const shell = document.createElement('div');
+  shell.className = 'fc-runner-shell';
+  shell.innerHTML = `
+    <div class="fc-arcade-scorebar"><span>Distance <strong class="fc-runner-score">${state.runner.score}</strong></span><span>Best <strong class="fc-runner-best">${Math.max(stats.runnerBest, state.runner.score)}</strong></span></div>
+    <div class="fc-runner-board" tabindex="0" aria-label="Endless runner game">
+      <div class="fc-runner-sky"><i class="fa-regular fa-sun"></i></div>
+      <div class="fc-runner-player"><i class="fa-solid fa-person-running"></i></div>
+      <div class="fc-runner-obstacles"></div>
+      <div class="fc-runner-ground"></div>
+    </div>
+    <div class="fc-runner-status">Press Jump, Space, or ↑ to start.</div>
+    <div class="fc-runner-actions">
+      <button type="button" class="fc-arcade-primary fc-runner-jump"><i class="fa-solid fa-arrow-up"></i> Jump</button>
+      <button type="button" class="fc-arcade-secondary fc-runner-new"><i class="fa-solid fa-rotate-right"></i> New Run</button>
+    </div>
+  `;
+  container.appendChild(shell);
+  shell.querySelector('.fc-runner-board').addEventListener('click', jumpRunner);
+  shell.querySelector('.fc-runner-jump').addEventListener('click', jumpRunner);
+  shell.querySelector('.fc-runner-new').addEventListener('click', () => { resetRunnerGame(); updateRunnerBoard(); });
+  updateRunnerBoard();
+}
+
+function updateRunnerBoard() {
+  const board = state.root?.querySelector('.fc-runner-board');
+  if (!board) return;
+  const player = board.querySelector('.fc-runner-player');
+  if (player) player.style.bottom = `${18 + state.runner.playerY}px`;
+  const obstacles = board.querySelector('.fc-runner-obstacles');
+  if (obstacles) {
+    obstacles.replaceChildren();
+    for (const obstacle of state.runner.obstacles) {
+      const el = document.createElement('span');
+      el.className = 'fc-runner-obstacle';
+      el.style.left = `${obstacle.x}%`;
+      el.style.width = `${obstacle.width}%`;
+      el.style.height = `${obstacle.height}px`;
+      obstacles.appendChild(el);
+    }
+  }
+  const score = state.root?.querySelector('.fc-runner-score');
+  const best = state.root?.querySelector('.fc-runner-best');
+  if (score) score.textContent = String(state.runner.score);
+  if (best) best.textContent = String(Math.max(getArcadeStats().runnerBest, state.runner.score));
+  const status = state.root?.querySelector('.fc-runner-status');
+  if (status) {
+    if (state.runner.gameOver) status.textContent = `Run over — distance ${state.runner.score}`;
+    else if (state.runner.paused) status.textContent = 'Paused — press Jump to continue.';
+    else if (!state.runner.running) status.textContent = 'Press Jump, Space, or ↑ to start.';
+    else status.textContent = '';
+  }
+}
+
+// ---------------------------
+// Guess My Number
+// ---------------------------
+
+function resetGuessNumber() {
+  state.guessNumber.target = Math.floor(Math.random() * 100) + 1;
+  state.guessNumber.attempts = 0;
+  state.guessNumber.status = 'playing';
+  state.guessNumber.feedback = 'I picked a number from 1 to 100.';
+}
+
+function renderGuessNumber(container) {
+  const stats = getArcadeStats();
+  const shell = document.createElement('div');
+  shell.className = 'fc-guess-shell';
+  shell.innerHTML = `
+    <div class="fc-guess-hero"><i class="fa-solid fa-hashtag"></i><strong>Guess My Number</strong><span>The phone picked a number between 1 and 100.</span></div>
+    <div class="fc-guess-feedback">${escapeMissionText(state.guessNumber.feedback)}</div>
+    <form class="fc-guess-form">
+      <input class="fc-guess-input" type="number" inputmode="numeric" min="1" max="100" step="1" placeholder="1–100" aria-label="Your guess">
+      <button type="submit" class="fc-arcade-primary">Guess</button>
+    </form>
+    <div class="fc-guess-stats"><span>Attempts <strong>${state.guessNumber.attempts}</strong></span><span>Wins <strong>${stats.guessNumberWins}</strong></span></div>
+    <button type="button" class="fc-arcade-secondary fc-guess-new"><i class="fa-solid fa-shuffle"></i> Pick a New Number</button>
+  `;
+  container.appendChild(shell);
+  const form = shell.querySelector('.fc-guess-form');
+  const input = shell.querySelector('.fc-guess-input');
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const value = Number.parseInt(input.value, 10);
+    if (!Number.isInteger(value) || value < 1 || value > 100) {
+      state.guessNumber.feedback = 'Enter a whole number from 1 to 100.';
+      renderPhone();
+      return;
+    }
+    if (state.guessNumber.status !== 'playing') return;
+    state.guessNumber.attempts += 1;
+    if (value === state.guessNumber.target) {
+      state.guessNumber.status = 'won';
+      state.guessNumber.feedback = `Correct! It was ${state.guessNumber.target}.`;
+      const nextAttempts = state.guessNumber.attempts;
+      const best = stats.guessNumberBestAttempts;
+      void saveArcadeStats({
+        guessNumberWins: stats.guessNumberWins + 1,
+        guessNumberBestAttempts: !best || nextAttempts < best ? nextAttempts : best
+      });
+    } else if (value > state.guessNumber.target) {
+      state.guessNumber.feedback = 'Too high.';
+    } else {
+      state.guessNumber.feedback = 'Too low.';
+    }
+    renderPhone();
+  });
+  shell.querySelector('.fc-guess-new').addEventListener('click', () => { resetGuessNumber(); renderPhone(); });
+  if (state.guessNumber.status === 'won') input.disabled = true;
+}
+
 // ---------------------------
 // Call signaling and call UI
 // ---------------------------
@@ -3959,6 +5509,7 @@ function startCallWithContext(context) {
   }
 
   stopTyping();
+  pauseArcadeActionGames();
   const callId = makeId();
   state.call = {
     callId,
@@ -4080,6 +5631,7 @@ function handleIncomingCallOffer(payload) {
   }
 
   stopTyping();
+  pauseArcadeActionGames();
   state.call = {
     callId: payload.callId,
     phase: "incoming",

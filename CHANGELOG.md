@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0
+
+- Expanded the **Arcade** from two games to five.
+- Added **Minesweeper** with an 8x8 board, 10 mines, flood reveal, Flag Mode, right-click flagging, first-click safety, win/loss states, and local cleared-board stats.
+- Added **Runner**, a generic endless jump-and-dodge game inspired by classic offline browser runners, with increasing speed, keyboard/tap controls, pause behavior, distance scoring, and a local best distance.
+- Added **Guess My Number** where the phone chooses 1-100 and responds with Too high, Too low, or Correct.
+- Guess My Number tracks wins and the user's best attempt count locally.
+- Runner and Snake automatically pause when the phone closes, the user leaves Arcade, or an incoming/outgoing cellphone call interrupts play.
+- Existing Snake and Tic Tac Toe behavior and statistics remain intact.
+
 ## 1.7.0
 
 - Added the **Arcade** app to the cellphone Home Screen.

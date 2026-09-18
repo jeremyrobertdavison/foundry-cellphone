@@ -150,9 +150,12 @@ foundry-cellphone-v1.6.0.zip
 
 ## Arcade
 
-The cellphone includes an **Arcade** app with two lightweight single-player games:
+The cellphone includes an **Arcade** app with five lightweight single-player games:
 
 - **Snake** with keyboard/WASD and on-screen controls, pause/resume, and a local best score.
 - **Tic Tac Toe** against a simple phone AI with local win/loss/draw stats.
+- **Minesweeper** on an 8x8 board with 10 mines, first-click safety, Flag Mode/right-click flagging, and cleared-board stats.
+- **Runner**, a generic endless jump-and-dodge game with keyboard/tap controls and a local best distance.
+- **Guess My Number**, where the phone selects a number from 1 to 100 and responds with Too high, Too low, or Correct.
 
-Snake automatically pauses if the phone is closed, the user leaves the game, or a call interrupts play.
+Snake and Runner automatically pause if the phone is closed, the user leaves Arcade, or a call interrupts play. Arcade scores and results are stored as client-local Foundry settings for each user/browser profile.
