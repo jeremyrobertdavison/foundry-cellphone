@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.7.0
+
+- Added the **Arcade** app to the cellphone Home Screen.
+- Added a functional **Snake** game with arrow-key/WASD controls and on-screen direction buttons.
+- Snake includes scoring, a persistent local best score, pause/resume, restart, food growth, wall collision, and self collision.
+- Snake automatically pauses when leaving the app, closing the phone, or receiving/placing a cellphone call.
+- Added **Tic Tac Toe** against a simple phone AI.
+- Tic Tac Toe includes win/block strategy, restart, win highlighting, and persistent local win/loss/draw stats.
+- Existing phone apps and communication features remain unchanged.
+
 ## 1.6.0
 
 - Added the **News** app to the cellphone Home Screen.

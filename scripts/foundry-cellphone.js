@@ -8,6 +8,7 @@ const NPC_CONTACTS_SETTING = "npcContacts";
 const MISSION_SEEN_SETTING = "missionSeen";
 const FRIENDPAGE_PROFILES_SETTING = "friendpageProfiles";
 const BROWSER_BOOKMARKS_SETTING = "browserBookmarks";
+const ARCADE_STATS_SETTING = "arcadeStats";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -15,6 +16,8 @@ const TYPING_KEEPALIVE_MS = 700;
 const TYPING_STOP_MS = 1500;
 const TYPING_EXPIRE_MS = 3000;
 const CALL_RING_TIMEOUT_MS = 30000;
+const SNAKE_BOARD_SIZE = 14;
+const SNAKE_TICK_MS = 175;
 
 const state = {
   phoneOpen: false,
@@ -48,6 +51,19 @@ const state = {
   selectedNewsId: null,
   newsEditorOpen: false,
   newsDraft: { headline: "", blurb: "", author: "", publisher: "", publishedAt: "" },
+  arcadeGame: "menu",
+  snake: {
+    segments: [],
+    food: null,
+    direction: { x: 1, y: 0 },
+    nextDirection: { x: 1, y: 0 },
+    score: 0,
+    running: false,
+    paused: false,
+    gameOver: false,
+    interval: null
+  },
+  ticTacToe: { board: Array(9).fill(null), turn: "X", status: "playing", aiTimer: null },
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -118,6 +134,16 @@ Hooks.once("init", () => {
       state.browserBookmarkManagerOpen = false;
       refreshAll();
     }
+  });
+
+  game.settings.register(MODULE_ID, ARCADE_STATS_SETTING, {
+    name: "Arcade Stats",
+    hint: "Local high scores and results for the cellphone Arcade app.",
+    scope: "client",
+    config: false,
+    type: Object,
+    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0 },
+    onChange: () => refreshAll()
   });
 });
 
@@ -298,6 +324,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-news"><i class="fa-solid fa-newspaper"></i></span>
               <span class="fc-app-label">News</span>
             </button>
+            <button class="fc-app-icon fc-app-icon-arcade" type="button" data-app="arcade">
+              <span class="fc-app-symbol fc-app-symbol-arcade"><i class="fa-solid fa-gamepad"></i></span>
+              <span class="fc-app-label">Arcade</span>
+            </button>
           </div>
         </section>
 
@@ -383,6 +413,10 @@ function buildPhone() {
           <section class="fc-news-view" hidden>
             <div class="fc-news-content"></div>
           </section>
+
+          <section class="fc-arcade-view" hidden>
+            <div class="fc-arcade-content"></div>
+          </section>
         </main>
       </div>
 
@@ -429,6 +463,7 @@ function buildPhone() {
 
   setupPhoneDragging(root.querySelector(".fc-phone"), root.querySelector(".fc-drag-handle"));
   window.addEventListener("resize", keepPhoneOnScreen);
+  window.addEventListener("keydown", onArcadeKeydown);
 }
 
 function togglePhone() {
@@ -450,7 +485,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -484,12 +519,16 @@ function openApp(app) {
     state.selectedNewsId = null;
     state.newsEditorOpen = false;
     resetNewsDraft();
+  } else if (app === 'arcade') {
+    state.arcadeGame = 'menu';
+    pauseSnakeGame();
   }
   renderPhone();
 }
 
 function goHome() {
   stopTyping();
+  pauseSnakeGame();
   state.app = 'home';
   state.selectedMissionId = null;
   state.missionEditorOpen = false;
@@ -512,6 +551,7 @@ function goHome() {
 
 function closePhone() {
   stopTyping();
+  pauseSnakeGame();
   state.phoneOpen = false;
   if (!state.root) return;
   state.root.classList.remove("is-open");
@@ -538,6 +578,17 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "arcade") {
+    if (state.arcadeGame !== "menu") {
+      pauseSnakeGame();
+      state.arcadeGame = "menu";
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.app === "news") {
     if (state.newsEditorOpen) {
@@ -956,6 +1007,7 @@ function renderPhone() {
   const browserView = state.root.querySelector(".fc-browser-view");
   const notesView = state.root.querySelector(".fc-notes-view");
   const newsView = state.root.querySelector(".fc-news-view");
+  const arcadeView = state.root.querySelector(".fc-arcade-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -971,6 +1023,7 @@ function renderPhone() {
   browserView.hidden = true;
   notesView.hidden = true;
   newsView.hidden = true;
+  arcadeView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -1025,6 +1078,13 @@ function renderPhone() {
     return;
   }
 
+  if (state.app === "arcade") {
+    arcadeView.hidden = false;
+    renderArcadeView();
+    updateBadges();
+    return;
+  }
+
   tabs.hidden = false;
   updateTabs();
 
@@ -1075,6 +1135,13 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "arcade") {
+    back.hidden = false;
+    title.textContent = state.arcadeGame === "snake" ? "Snake" : state.arcadeGame === "tictactoe" ? "Tic Tac Toe" : "Arcade";
+    subtitle.textContent = state.arcadeGame === "menu" ? "Pick a game" : "Cellphone games";
+    return;
+  }
 
   if (state.app === "news") {
     back.hidden = false;
@@ -4497,6 +4564,415 @@ function makeId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+
+// ---------------------------
+// Arcade app: Snake + Tic Tac Toe
+// ---------------------------
+
+function getArcadeStats() {
+  const raw = game.settings.get(MODULE_ID, ARCADE_STATS_SETTING) || {};
+  return {
+    snakeBest: Number(raw.snakeBest || 0),
+    ticTacToeWins: Number(raw.ticTacToeWins || 0),
+    ticTacToeLosses: Number(raw.ticTacToeLosses || 0),
+    ticTacToeDraws: Number(raw.ticTacToeDraws || 0)
+  };
+}
+
+async function saveArcadeStats(patch) {
+  const next = { ...getArcadeStats(), ...patch };
+  try {
+    await game.settings.set(MODULE_ID, ARCADE_STATS_SETTING, next);
+  } catch (error) {
+    console.warn(`${MODULE_ID} | Could not save Arcade stats`, error);
+  }
+}
+
+function renderArcadeView() {
+  const container = state.root.querySelector('.fc-arcade-content');
+  if (!container) return;
+  container.replaceChildren();
+
+  if (state.arcadeGame === 'snake') {
+    renderSnakeGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'tictactoe') {
+    renderTicTacToe(container);
+    return;
+  }
+  renderArcadeMenu(container);
+}
+
+function renderArcadeMenu(container) {
+  const intro = document.createElement('div');
+  intro.className = 'fc-arcade-intro';
+  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Two quick games for downtime between scenes.</span></div>';
+  container.appendChild(intro);
+
+  const stats = getArcadeStats();
+  const grid = document.createElement('div');
+  grid.className = 'fc-arcade-menu';
+
+  const snake = document.createElement('button');
+  snake.type = 'button';
+  snake.className = 'fc-arcade-game-card';
+  snake.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-snake"><i class="fa-solid fa-staff-snake"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Snake</strong><small>Best score: ${stats.snakeBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  snake.addEventListener('click', () => {
+    state.arcadeGame = 'snake';
+    if (!state.snake.segments.length || state.snake.gameOver) resetSnakeGame();
+    renderPhone();
+  });
+
+  const ttt = document.createElement('button');
+  ttt.type = 'button';
+  ttt.className = 'fc-arcade-game-card';
+  ttt.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-ttt"><i class="fa-solid fa-table-cells-large"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Tic Tac Toe</strong><small>${stats.ticTacToeWins}W · ${stats.ticTacToeLosses}L · ${stats.ticTacToeDraws}D</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  ttt.addEventListener('click', () => {
+    state.arcadeGame = 'tictactoe';
+    if (!state.ticTacToe.board?.length) resetTicTacToe();
+    renderPhone();
+  });
+
+  grid.append(snake, ttt);
+  container.appendChild(grid);
+}
+
+function resetSnakeGame() {
+  stopSnakeInterval();
+  const mid = Math.floor(SNAKE_BOARD_SIZE / 2);
+  state.snake.segments = [
+    { x: mid, y: mid },
+    { x: mid - 1, y: mid },
+    { x: mid - 2, y: mid }
+  ];
+  state.snake.direction = { x: 1, y: 0 };
+  state.snake.nextDirection = { x: 1, y: 0 };
+  state.snake.score = 0;
+  state.snake.running = false;
+  state.snake.paused = false;
+  state.snake.gameOver = false;
+  placeSnakeFood();
+}
+
+function placeSnakeFood() {
+  const occupied = new Set(state.snake.segments.map((p) => `${p.x},${p.y}`));
+  const available = [];
+  for (let y = 0; y < SNAKE_BOARD_SIZE; y++) {
+    for (let x = 0; x < SNAKE_BOARD_SIZE; x++) {
+      if (!occupied.has(`${x},${y}`)) available.push({ x, y });
+    }
+  }
+  state.snake.food = available.length ? available[Math.floor(Math.random() * available.length)] : null;
+}
+
+function startSnakeGame() {
+  if (state.snake.gameOver) resetSnakeGame();
+  state.snake.running = true;
+  state.snake.paused = false;
+  stopSnakeInterval();
+  state.snake.interval = window.setInterval(snakeStep, SNAKE_TICK_MS);
+  updateSnakeBoard();
+}
+
+function pauseSnakeGame() {
+  if (!state.snake) return;
+  if (state.snake.running) {
+    state.snake.running = false;
+    state.snake.paused = true;
+  }
+  stopSnakeInterval();
+  if (state.phoneOpen && state.app === 'arcade' && state.arcadeGame === 'snake' && !state.call) updateSnakeBoard();
+}
+
+function stopSnakeInterval() {
+  if (state.snake?.interval) {
+    window.clearInterval(state.snake.interval);
+    state.snake.interval = null;
+  }
+}
+
+function setSnakeDirection(x, y) {
+  if (state.snake.gameOver) return;
+  const current = state.snake.direction;
+  if (current.x + x === 0 && current.y + y === 0) return;
+  state.snake.nextDirection = { x, y };
+  if (!state.snake.running && !state.snake.paused) startSnakeGame();
+}
+
+function snakeStep() {
+  if (!state.snake.running || state.call) return;
+  const dir = state.snake.nextDirection;
+  state.snake.direction = { ...dir };
+  const head = state.snake.segments[0];
+  const next = { x: head.x + dir.x, y: head.y + dir.y };
+  const hitsWall = next.x < 0 || next.y < 0 || next.x >= SNAKE_BOARD_SIZE || next.y >= SNAKE_BOARD_SIZE;
+  const eating = Boolean(state.snake.food && next.x === state.snake.food.x && next.y === state.snake.food.y);
+  const bodyToCheck = eating ? state.snake.segments : state.snake.segments.slice(0, -1);
+  const hitsSelf = bodyToCheck.some((p) => p.x === next.x && p.y === next.y);
+
+  if (hitsWall || hitsSelf) {
+    finishSnakeGame();
+    return;
+  }
+
+  state.snake.segments.unshift(next);
+  if (eating) {
+    state.snake.score += 1;
+    placeSnakeFood();
+  } else {
+    state.snake.segments.pop();
+  }
+  updateSnakeBoard();
+}
+
+function finishSnakeGame() {
+  state.snake.running = false;
+  state.snake.paused = false;
+  state.snake.gameOver = true;
+  stopSnakeInterval();
+  const stats = getArcadeStats();
+  if (state.snake.score > stats.snakeBest) void saveArcadeStats({ snakeBest: state.snake.score });
+  updateSnakeBoard();
+}
+
+function renderSnakeGame(container) {
+  if (!state.snake.segments.length) resetSnakeGame();
+  const stats = getArcadeStats();
+  const shell = document.createElement('div');
+  shell.className = 'fc-snake-shell';
+  shell.innerHTML = `
+    <div class="fc-arcade-scorebar">
+      <span>Score <strong class="fc-snake-score">${state.snake.score}</strong></span>
+      <span>Best <strong class="fc-snake-best">${Math.max(stats.snakeBest, state.snake.score)}</strong></span>
+    </div>
+    <div class="fc-snake-board" role="img" aria-label="Snake game board"></div>
+    <div class="fc-snake-message"></div>
+    <div class="fc-snake-controls">
+      <span></span><button type="button" data-dir="up" aria-label="Move up"><i class="fa-solid fa-chevron-up"></i></button><span></span>
+      <button type="button" data-dir="left" aria-label="Move left"><i class="fa-solid fa-chevron-left"></i></button>
+      <button type="button" class="fc-snake-pause" aria-label="Pause or resume"><i class="fa-solid fa-play"></i></button>
+      <button type="button" data-dir="right" aria-label="Move right"><i class="fa-solid fa-chevron-right"></i></button>
+      <span></span><button type="button" data-dir="down" aria-label="Move down"><i class="fa-solid fa-chevron-down"></i></button><span></span>
+    </div>
+    <button type="button" class="fc-arcade-secondary fc-snake-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+  `;
+  container.appendChild(shell);
+
+  const board = shell.querySelector('.fc-snake-board');
+  for (let i = 0; i < SNAKE_BOARD_SIZE * SNAKE_BOARD_SIZE; i++) {
+    const cell = document.createElement('span');
+    cell.className = 'fc-snake-cell';
+    board.appendChild(cell);
+  }
+
+  const directions = { up: [0,-1], down: [0,1], left: [-1,0], right: [1,0] };
+  shell.querySelectorAll('[data-dir]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const [x,y] = directions[button.dataset.dir];
+      setSnakeDirection(x,y);
+    });
+  });
+  shell.querySelector('.fc-snake-pause').addEventListener('click', () => {
+    if (state.snake.gameOver) startSnakeGame();
+    else if (state.snake.running) pauseSnakeGame();
+    else startSnakeGame();
+  });
+  shell.querySelector('.fc-snake-new').addEventListener('click', () => {
+    resetSnakeGame();
+    updateSnakeBoard();
+  });
+  updateSnakeBoard();
+}
+
+function updateSnakeBoard() {
+  const board = state.root?.querySelector('.fc-snake-board');
+  if (!board) return;
+  const cells = [...board.children];
+  for (const cell of cells) cell.className = 'fc-snake-cell';
+  for (let i = 0; i < state.snake.segments.length; i++) {
+    const p = state.snake.segments[i];
+    const cell = cells[p.y * SNAKE_BOARD_SIZE + p.x];
+    if (cell) cell.classList.add(i === 0 ? 'is-head' : 'is-snake');
+  }
+  if (state.snake.food) {
+    const foodCell = cells[state.snake.food.y * SNAKE_BOARD_SIZE + state.snake.food.x];
+    foodCell?.classList.add('is-food');
+  }
+  const score = state.root?.querySelector('.fc-snake-score');
+  const best = state.root?.querySelector('.fc-snake-best');
+  if (score) score.textContent = String(state.snake.score);
+  if (best) best.textContent = String(Math.max(getArcadeStats().snakeBest, state.snake.score));
+  const message = state.root?.querySelector('.fc-snake-message');
+  if (message) {
+    if (state.snake.gameOver) message.textContent = `Game over — score ${state.snake.score}`;
+    else if (state.snake.paused) message.textContent = 'Paused';
+    else if (!state.snake.running) message.textContent = 'Use arrows / WASD or tap a direction to start';
+    else message.textContent = '';
+  }
+  const pause = state.root?.querySelector('.fc-snake-pause i');
+  if (pause) pause.className = `fa-solid ${state.snake.running ? 'fa-pause' : 'fa-play'}`;
+}
+
+function onArcadeKeydown(event) {
+  if (!state.phoneOpen || state.call || state.app !== 'arcade' || state.arcadeGame !== 'snake') return;
+  const tag = event.target?.tagName?.toLowerCase();
+  if (['input','textarea','select'].includes(tag)) return;
+  const keys = {
+    ArrowUp: [0,-1], w: [0,-1], W: [0,-1],
+    ArrowDown: [0,1], s: [0,1], S: [0,1],
+    ArrowLeft: [-1,0], a: [-1,0], A: [-1,0],
+    ArrowRight: [1,0], d: [1,0], D: [1,0]
+  };
+  if (keys[event.key]) {
+    event.preventDefault();
+    setSnakeDirection(...keys[event.key]);
+  } else if (event.key === ' ') {
+    event.preventDefault();
+    if (state.snake.running) pauseSnakeGame();
+    else startSnakeGame();
+  }
+}
+
+const TTT_LINES = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+function resetTicTacToe() {
+  if (state.ticTacToe.aiTimer) window.clearTimeout(state.ticTacToe.aiTimer);
+  state.ticTacToe.board = Array(9).fill(null);
+  state.ticTacToe.turn = 'X';
+  state.ticTacToe.status = 'playing';
+  state.ticTacToe.aiTimer = null;
+}
+
+function getTicTacToeWinner(board = state.ticTacToe.board) {
+  for (const line of TTT_LINES) {
+    const [a,b,c] = line;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) return { mark: board[a], line };
+  }
+  if (board.every(Boolean)) return { mark: 'draw', line: [] };
+  return null;
+}
+
+function renderTicTacToe(container) {
+  const stats = getArcadeStats();
+  const shell = document.createElement('div');
+  shell.className = 'fc-ttt-shell';
+  shell.innerHTML = `
+    <div class="fc-ttt-stats"><span>${stats.ticTacToeWins} Wins</span><span>${stats.ticTacToeLosses} Losses</span><span>${stats.ticTacToeDraws} Draws</span></div>
+    <div class="fc-ttt-player-row"><span class="is-you">You are X</span><span>Phone is O</span></div>
+    <div class="fc-ttt-board" role="grid" aria-label="Tic Tac Toe board"></div>
+    <div class="fc-ttt-status"></div>
+    <button type="button" class="fc-arcade-primary fc-ttt-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+  `;
+  container.appendChild(shell);
+  const board = shell.querySelector('.fc-ttt-board');
+  for (let i = 0; i < 9; i++) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'fc-ttt-cell';
+    button.dataset.index = String(i);
+    button.setAttribute('role', 'gridcell');
+    button.addEventListener('click', () => makePlayerTicTacToeMove(i));
+    board.appendChild(button);
+  }
+  shell.querySelector('.fc-ttt-new').addEventListener('click', () => {
+    resetTicTacToe();
+    renderPhone();
+  });
+  updateTicTacToeBoard();
+}
+
+function makePlayerTicTacToeMove(index) {
+  if (state.ticTacToe.status !== 'playing' || state.ticTacToe.turn !== 'X' || state.ticTacToe.board[index]) return;
+  state.ticTacToe.board[index] = 'X';
+  const result = getTicTacToeWinner();
+  if (result) {
+    finishTicTacToe(result);
+    return;
+  }
+  state.ticTacToe.turn = 'O';
+  updateTicTacToeBoard();
+  state.ticTacToe.aiTimer = window.setTimeout(makeTicTacToeAiMove, 350);
+}
+
+function makeTicTacToeAiMove() {
+  state.ticTacToe.aiTimer = null;
+  if (state.ticTacToe.status !== 'playing' || state.ticTacToe.turn !== 'O') return;
+  const move = chooseTicTacToeAiMove();
+  if (move == null) return;
+  state.ticTacToe.board[move] = 'O';
+  const result = getTicTacToeWinner();
+  if (result) {
+    finishTicTacToe(result);
+    return;
+  }
+  state.ticTacToe.turn = 'X';
+  updateTicTacToeBoard();
+}
+
+function chooseTicTacToeAiMove() {
+  const board = state.ticTacToe.board;
+  const empty = board.map((v,i) => v ? null : i).filter((v) => v != null);
+  const findMove = (mark) => {
+    for (const i of empty) {
+      const test = [...board];
+      test[i] = mark;
+      if (getTicTacToeWinner(test)?.mark === mark) return i;
+    }
+    return null;
+  };
+  const win = findMove('O');
+  if (win != null) return win;
+  const block = findMove('X');
+  if (block != null) return block;
+  if (!board[4]) return 4;
+  const corners = [0,2,6,8].filter((i) => !board[i]);
+  if (corners.length) return corners[Math.floor(Math.random() * corners.length)];
+  return empty.length ? empty[Math.floor(Math.random() * empty.length)] : null;
+}
+
+function finishTicTacToe(result) {
+  state.ticTacToe.status = result.mark;
+  state.ticTacToe.turn = null;
+  const stats = getArcadeStats();
+  if (result.mark === 'X') void saveArcadeStats({ ticTacToeWins: stats.ticTacToeWins + 1 });
+  else if (result.mark === 'O') void saveArcadeStats({ ticTacToeLosses: stats.ticTacToeLosses + 1 });
+  else void saveArcadeStats({ ticTacToeDraws: stats.ticTacToeDraws + 1 });
+  updateTicTacToeBoard(result.line);
+}
+
+function updateTicTacToeBoard(winningLine = null) {
+  const cells = [...(state.root?.querySelectorAll('.fc-ttt-cell') || [])];
+  const result = getTicTacToeWinner();
+  const line = winningLine || result?.line || [];
+  cells.forEach((cell, index) => {
+    const mark = state.ticTacToe.board[index];
+    cell.textContent = mark || '';
+    cell.classList.toggle('is-x', mark === 'X');
+    cell.classList.toggle('is-o', mark === 'O');
+    cell.classList.toggle('is-win', line.includes(index));
+    cell.disabled = Boolean(mark) || state.ticTacToe.status !== 'playing' || state.ticTacToe.turn !== 'X';
+  });
+  const status = state.root?.querySelector('.fc-ttt-status');
+  if (!status) return;
+  if (state.ticTacToe.status === 'X') status.textContent = 'You win!';
+  else if (state.ticTacToe.status === 'O') status.textContent = 'The phone wins.';
+  else if (state.ticTacToe.status === 'draw') status.textContent = 'Draw game.';
+  else status.textContent = state.ticTacToe.turn === 'X' ? 'Your turn' : 'Phone is thinking…';
+}
+
 // ---------------------------
 // Call signaling and call UI
 // ---------------------------
@@ -4590,6 +5066,7 @@ function startCallWithContext(context) {
   }
 
   stopTyping();
+  pauseSnakeGame();
   const callId = makeId();
   state.call = {
     callId,
@@ -4711,6 +5188,7 @@ function handleIncomingCallOffer(payload) {
   }
 
   stopTyping();
+  pauseSnakeGame();
   state.call = {
     callId: payload.callId,
     phase: "incoming",

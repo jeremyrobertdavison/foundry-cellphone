@@ -146,3 +146,13 @@ foundry-cellphone-v1.6.0.zip
 ├── scripts/
 └── styles/
 ```
+
+
+## Arcade
+
+The cellphone includes an **Arcade** app with two lightweight single-player games:
+
+- **Snake** with keyboard/WASD and on-screen controls, pause/resume, and a local best score.
+- **Tic Tac Toe** against a simple phone AI with local win/loss/draw stats.
+
+Snake automatically pauses if the phone is closed, the user leaves the game, or a call interrupts play.
