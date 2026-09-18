@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.0
+
+- Added **Mondo Rides**, a ride-share-inspired cellphone app for player-controlled downtime travel between GM-approved Foundry Scenes.
+- GMs can open **Manage Destinations** and toggle any world Scene available or unavailable with a single switch.
+- Players see only currently enabled Mondo Rides destinations.
+- Destination cards use Scene names and thumbnails/background artwork when available.
+- The app shows the player's currently viewed Scene and disables travel to the Scene they are already viewing.
+- Player ride requests are validated through the module socket by the connected active GM before movement occurs.
+- On Foundry v13, Mondo Rides uses the core `Scene.pullUsers` API to move only the requesting player without activating the Scene for everyone.
+- Included a Foundry v12 compatibility fallback using client Scene viewing after GM approval; v12 destinations must be player-accessible if core pull support is unavailable.
+- GMs may use Mondo Rides themselves to locally view an enabled destination.
+- Disabled destinations immediately disappear from player phones and forged requests to disabled Scene IDs are rejected by the GM dispatcher.
+- Added a ninth Home Screen app icon with Mondo Rides centered beneath the existing app grid.
+- Existing Messages, Mission Log, Friendpage, Browser, Notes, News, Arcade, and Maps behavior remains unchanged.
+
 ## 1.9.0
 
 - Added the **Maps** cellphone app.

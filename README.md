@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **1.9.0** adds the **Maps** app: GM-managed reference maps with draggable character markers, multiple map support, optional player-restricted visibility, and an enlarged inspection view. Maps are informational only and do not move Foundry tokens or alter Scene coordinates.
+Version **2.0.0** adds **Mondo Rides**, a ride-share-inspired app that lets players independently travel between Foundry Scenes the GM has made available for downtime exploration. The GM can enable or disable destinations at any time without activating those Scenes for the whole table.
 
 ## Cellphone apps
 
@@ -14,6 +14,19 @@ Version **1.9.0** adds the **Maps** app: GM-managed reference maps with draggabl
 - **News** — GM-authored headline feed with blurb, publisher, author, and publication date/time.
 - **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, and Guess My Number.
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
+- **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
+
+## Mondo Rides
+
+Mondo Rides turns GM-approved Foundry Scenes into player-selectable downtime destinations. The app is styled like a generic ride-share service and shows the user's current Scene plus every destination currently enabled by the GM.
+
+GMs receive **Manage Destinations**, which lists the world's Scenes with simple on/off switches. Enabling a Scene immediately adds it to Mondo Rides; disabling it immediately removes it from player phones. No Mondo-specific copy of the Scene is created.
+
+When a player requests a ride, the module sends the request through the Foundry module socket to the connected active GM and validates that the destination is still enabled. On Foundry v13, the GM client uses Foundry's player-specific Scene pull API so only the requesting user changes Scene; other players remain where they are and the destination is not globally activated.
+
+On Foundry v12, where that core player-specific method is not available on `Scene`, the module falls back to GM-approved client-side Scene viewing. For that fallback, the destination Scene must already be accessible to the player through Foundry's Scene permissions.
+
+The app uses Scene thumbnails/background artwork when available and never moves Tokens between Scenes; it changes only the requesting user's viewed Scene.
 
 ## Maps
 
@@ -74,7 +87,7 @@ Snake and Runner automatically pause when appropriate, including when leaving Ar
 
 - Minimum: Foundry VTT v12
 - Verified target: Foundry VTT v13.350
-- Module socket namespace enabled for calls and typing indicators
+- Module socket namespace enabled for calls, typing indicators, and Mondo Rides dispatch
 
 ## GitHub installation
 
@@ -95,7 +108,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.9.0.zip
+foundry-cellphone-v2.0.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

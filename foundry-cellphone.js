@@ -10,6 +10,7 @@ const MISSION_SEEN_SETTING = "missionSeen";
 const FRIENDPAGE_PROFILES_SETTING = "friendpageProfiles";
 const BROWSER_BOOKMARKS_SETTING = "browserBookmarks";
 const ARCADE_STATS_SETTING = "arcadeStats";
+const MONDO_RIDES_SETTING = "mondoRidesScenes";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -60,6 +61,8 @@ const state = {
   mapEditorOpen: false,
   mapExpanded: false,
   mapEditorDraft: { id: null, name: "", image: "", visibility: "all", selectedUserIds: new Set(), markers: [], createdAt: null, sortIndex: 0 },
+  mondoManagerOpen: false,
+  mondoRidePending: null,
   arcadeGame: "menu",
   snake: {
     segments: [],
@@ -155,6 +158,16 @@ Hooks.once("init", () => {
     config: false,
     type: Object,
     default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0 },
+    onChange: () => refreshAll()
+  });
+
+  game.settings.register(MODULE_ID, MONDO_RIDES_SETTING, {
+    name: "Mondo Rides Destinations",
+    hint: "Scenes currently available to players through the Mondo Rides cellphone app.",
+    scope: "world",
+    config: false,
+    type: Array,
+    default: [],
     onChange: () => refreshAll()
   });
 });
@@ -355,6 +368,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-maps"><i class="fa-solid fa-map-location-dot"></i></span>
               <span class="fc-app-label">Maps</span>
             </button>
+            <button class="fc-app-icon fc-app-icon-mondo" type="button" data-app="mondo">
+              <span class="fc-app-symbol fc-app-symbol-mondo"><i class="fa-solid fa-car-side"></i></span>
+              <span class="fc-app-label">Mondo Rides</span>
+            </button>
           </div>
         </section>
 
@@ -448,6 +465,10 @@ function buildPhone() {
           <section class="fc-maps-view" hidden>
             <div class="fc-maps-content"></div>
           </section>
+
+          <section class="fc-mondo-view" hidden>
+            <div class="fc-mondo-content"></div>
+          </section>
         </main>
       </div>
 
@@ -516,7 +537,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -559,6 +580,9 @@ function openApp(app) {
     state.mapEditorOpen = false;
     state.mapExpanded = false;
     resetMapDraft();
+  } else if (app === 'mondo') {
+    state.mondoManagerOpen = false;
+    state.mondoRidePending = null;
   }
   renderPhone();
 }
@@ -588,6 +612,8 @@ function goHome() {
   state.mapEditorOpen = false;
   state.mapExpanded = false;
   resetMapDraft();
+  state.mondoManagerOpen = false;
+  state.mondoRidePending = null;
   renderPhone();
 }
 
@@ -620,6 +646,16 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "mondo") {
+    if (state.mondoManagerOpen) {
+      state.mondoManagerOpen = false;
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.app === "maps") {
     if (state.mapEditorOpen) {
@@ -1074,6 +1110,7 @@ function renderPhone() {
   const newsView = state.root.querySelector(".fc-news-view");
   const arcadeView = state.root.querySelector(".fc-arcade-view");
   const mapsView = state.root.querySelector(".fc-maps-view");
+  const mondoView = state.root.querySelector(".fc-mondo-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -1091,6 +1128,7 @@ function renderPhone() {
   newsView.hidden = true;
   arcadeView.hidden = true;
   mapsView.hidden = true;
+  mondoView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -1159,6 +1197,13 @@ function renderPhone() {
     return;
   }
 
+  if (state.app === "mondo") {
+    mondoView.hidden = false;
+    renderMondoRidesView();
+    updateBadges();
+    return;
+  }
+
   tabs.hidden = false;
   updateTabs();
 
@@ -1209,6 +1254,13 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "mondo") {
+    back.hidden = false;
+    title.textContent = state.mondoManagerOpen ? "Mondo Destinations" : "Mondo Rides";
+    subtitle.textContent = state.mondoManagerOpen ? "GM scene access" : "Where to?";
+    return;
+  }
 
   if (state.app === "maps") {
     back.hidden = false;
@@ -4657,6 +4709,391 @@ function makeId() {
 
 
 // ---------------------------
+// Mondo Rides app
+// ---------------------------
+
+function normalizeMondoDestination(entry) {
+  if (!entry || !entry.sceneId) return null;
+  return {
+    sceneId: String(entry.sceneId),
+    name: String(entry.name || 'Destination'),
+    image: String(entry.image || '')
+  };
+}
+
+function getMondoDestinations() {
+  const raw = game.settings.get(MODULE_ID, MONDO_RIDES_SETTING);
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeMondoDestination).filter(Boolean);
+}
+
+function getMondoDestination(sceneId) {
+  return getMondoDestinations().find((entry) => entry.sceneId === sceneId) || null;
+}
+
+function getMondoSceneImage(scene) {
+  return String(scene?.thumbnail || scene?.thumb || scene?.background?.src || '');
+}
+
+function snapshotMondoScene(scene) {
+  return {
+    sceneId: scene.id,
+    name: String(scene.navName || scene.name || 'Destination'),
+    image: getMondoSceneImage(scene)
+  };
+}
+
+function getMondoCurrentSceneId() {
+  return game.scenes?.viewed?.id || globalThis.canvas?.scene?.id || game.user?.viewedScene || null;
+}
+
+function getMondoCurrentSceneName() {
+  const id = getMondoCurrentSceneId();
+  return game.scenes?.get(id)?.name || globalThis.canvas?.scene?.name || 'Current location';
+}
+
+function renderMondoRidesView() {
+  const container = state.root.querySelector('.fc-mondo-content');
+  if (!container) return;
+  container.replaceChildren();
+
+  if (state.mondoManagerOpen) {
+    renderMondoManager(container);
+    return;
+  }
+  renderMondoPassengerView(container);
+}
+
+function renderMondoPassengerView(container) {
+  const hero = document.createElement('section');
+  hero.className = 'fc-mondo-hero';
+  hero.innerHTML = `
+    <div class="fc-mondo-brand"><span class="fc-mondo-brand-mark"><i class="fa-solid fa-car-side"></i></span><div><strong>Mondo</strong><span>RIDES</span></div></div>
+    <div class="fc-mondo-question">Where to?</div>
+  `;
+  container.appendChild(hero);
+
+  const current = document.createElement('div');
+  current.className = 'fc-mondo-current';
+  const currentDot = document.createElement('span');
+  currentDot.className = 'fc-mondo-current-dot';
+  const currentCopy = document.createElement('div');
+  const currentLabel = document.createElement('span');
+  currentLabel.textContent = 'Current location';
+  const currentName = document.createElement('strong');
+  currentName.textContent = getMondoCurrentSceneName();
+  currentCopy.append(currentLabel, currentName);
+  current.append(currentDot, currentCopy);
+  container.appendChild(current);
+
+  if (game.user?.isGM) {
+    const manage = document.createElement('button');
+    manage.type = 'button';
+    manage.className = 'fc-manager-button fc-mondo-manage';
+    manage.innerHTML = '<i class="fa-solid fa-sliders"></i><span>Manage Destinations</span>';
+    manage.addEventListener('click', () => {
+      state.mondoManagerOpen = true;
+      state.mondoRidePending = null;
+      renderPhone();
+    });
+    container.appendChild(manage);
+  }
+
+  const heading = document.createElement('div');
+  heading.className = 'fc-mondo-section-heading';
+  heading.innerHTML = '<strong>Available rides</strong><span>Choose a destination</span>';
+  container.appendChild(heading);
+
+  const destinations = getMondoDestinations();
+  if (!destinations.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-mondo-empty';
+    empty.innerHTML = `<i class="fa-solid fa-car-side"></i><strong>No rides available</strong><span>${game.user?.isGM ? 'Open Manage Destinations to make scenes available.' : 'The GM has not opened any downtime destinations yet.'}</span>`;
+    container.appendChild(empty);
+    return;
+  }
+
+  const currentSceneId = getMondoCurrentSceneId();
+  const list = document.createElement('div');
+  list.className = 'fc-mondo-destination-list';
+  for (const destination of destinations) {
+    const row = document.createElement('article');
+    row.className = 'fc-mondo-destination';
+
+    const image = document.createElement('div');
+    image.className = 'fc-mondo-destination-image';
+    if (destination.image) image.style.backgroundImage = `url("${destination.image.replace(/"/g, '%22')}")`;
+    else image.innerHTML = '<i class="fa-solid fa-city"></i>';
+
+    const copy = document.createElement('div');
+    copy.className = 'fc-mondo-destination-copy';
+    const name = document.createElement('strong');
+    name.textContent = destination.name;
+    const detail = document.createElement('span');
+    const isHere = destination.sceneId === currentSceneId;
+    detail.innerHTML = isHere
+      ? '<i class="fa-solid fa-location-dot"></i> You are here'
+      : '<i class="fa-solid fa-bolt"></i> Available now';
+    copy.append(name, detail);
+
+    const ride = document.createElement('button');
+    ride.type = 'button';
+    ride.className = 'fc-mondo-ride-button';
+    const pending = state.mondoRidePending?.sceneId === destination.sceneId;
+    ride.disabled = Boolean(state.mondoRidePending) || isHere;
+    ride.innerHTML = isHere
+      ? '<i class="fa-solid fa-check"></i>'
+      : pending
+        ? '<i class="fa-solid fa-spinner fa-spin"></i>'
+        : '<i class="fa-solid fa-arrow-right"></i>';
+    ride.title = isHere ? 'You are already here' : `Ride to ${destination.name}`;
+    ride.addEventListener('click', () => requestMondoRide(destination));
+
+    row.append(image, copy, ride);
+    list.appendChild(row);
+  }
+  container.appendChild(list);
+
+  const foot = document.createElement('div');
+  foot.className = 'fc-mondo-footnote';
+  foot.innerHTML = state.mondoRidePending
+    ? '<i class="fa-solid fa-car-side"></i><span>Finding your Mondo driver…</span>'
+    : '<i class="fa-solid fa-circle-info"></i><span>Rides change only your Foundry scene view. Other players stay where they are.</span>';
+  container.appendChild(foot);
+}
+
+function renderMondoManager(container) {
+  if (!game.user?.isGM) {
+    state.mondoManagerOpen = false;
+    renderPhone();
+    return;
+  }
+
+  const help = document.createElement('div');
+  help.className = 'fc-mondo-manager-help';
+  help.innerHTML = '<i class="fa-solid fa-circle-info"></i><span>Turn destinations on or off at any time. Players only see scenes that are currently enabled here.</span>';
+  container.appendChild(help);
+
+  const activeIds = new Set(getMondoDestinations().map((entry) => entry.sceneId));
+  const scenes = [...game.scenes.contents].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  if (!scenes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-mondo-empty';
+    empty.innerHTML = '<i class="fa-solid fa-map"></i><strong>No scenes found</strong><span>Create Foundry Scenes before adding Mondo Rides destinations.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'fc-mondo-manager-list';
+  for (const scene of scenes) {
+    const label = document.createElement('label');
+    label.className = `fc-mondo-manager-row${activeIds.has(scene.id) ? ' is-active' : ''}`;
+
+    const thumb = document.createElement('span');
+    thumb.className = 'fc-mondo-manager-thumb';
+    const sceneImage = getMondoSceneImage(scene);
+    if (sceneImage) thumb.style.backgroundImage = `url("${sceneImage.replace(/"/g, '%22')}")`;
+    else thumb.innerHTML = '<i class="fa-solid fa-map-location-dot"></i>';
+
+    const copy = document.createElement('span');
+    copy.className = 'fc-mondo-manager-copy';
+    const title = document.createElement('strong');
+    title.textContent = scene.name || 'Unnamed Scene';
+    const status = document.createElement('span');
+    status.textContent = activeIds.has(scene.id) ? 'Available in Mondo Rides' : 'Unavailable to Mondo Rides';
+    copy.append(title, status);
+
+    const toggleWrap = document.createElement('span');
+    toggleWrap.className = 'fc-mondo-toggle';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = activeIds.has(scene.id);
+    checkbox.setAttribute('aria-label', `Make ${scene.name || 'scene'} available in Mondo Rides`);
+    const slider = document.createElement('span');
+    slider.className = 'fc-mondo-toggle-slider';
+    toggleWrap.append(checkbox, slider);
+
+    checkbox.addEventListener('change', async () => {
+      checkbox.disabled = true;
+      try {
+        await setMondoSceneEnabled(scene, checkbox.checked);
+      } catch (error) {
+        console.error(`${MODULE_ID} | Failed to update Mondo Rides destination`, error);
+        checkbox.checked = !checkbox.checked;
+        ui.notifications.error('Mondo Rides destination could not be updated.');
+      } finally {
+        checkbox.disabled = false;
+      }
+    });
+
+    label.append(thumb, copy, toggleWrap);
+    list.appendChild(label);
+  }
+  container.appendChild(list);
+
+  const note = document.createElement('div');
+  note.className = 'fc-mondo-manager-note';
+  note.innerHTML = '<i class="fa-solid fa-shield-halved"></i><span>Ride requests are validated by a connected GM before a player is moved to a destination.</span>';
+  container.appendChild(note);
+}
+
+async function setMondoSceneEnabled(scene, enabled) {
+  if (!game.user?.isGM || !scene?.id) return;
+  const current = getMondoDestinations();
+  const without = current.filter((entry) => entry.sceneId !== scene.id);
+  if (enabled) without.push(snapshotMondoScene(scene));
+  without.sort((a, b) => a.name.localeCompare(b.name));
+  await game.settings.set(MODULE_ID, MONDO_RIDES_SETTING, without);
+}
+
+function getMondoDispatchGm() {
+  const activeGm = game.users?.activeGM;
+  if (activeGm?.active) return activeGm;
+  return game.users?.contents?.find((user) => user.isGM && user.active) || null;
+}
+
+function isMondoDispatchAuthority() {
+  return Boolean(game.user?.isGM && getMondoDispatchGm()?.id === game.user.id);
+}
+
+async function requestMondoRide(destination) {
+  if (!destination?.sceneId || state.mondoRidePending) return;
+  if (!getMondoDestination(destination.sceneId)) {
+    ui.notifications.warn('That Mondo Rides destination is no longer available.');
+    renderPhone();
+    return;
+  }
+  if (destination.sceneId === getMondoCurrentSceneId()) {
+    ui.notifications.info('You are already at that destination.');
+    return;
+  }
+
+  const requestId = makeId();
+  state.mondoRidePending = { requestId, sceneId: destination.sceneId, name: destination.name };
+  renderPhone();
+
+  if (game.user?.isGM) {
+    const scene = game.scenes.get(destination.sceneId);
+    if (!scene) {
+      state.mondoRidePending = null;
+      ui.notifications.error('That Foundry Scene no longer exists.');
+      renderPhone();
+      return;
+    }
+    try {
+      await scene.view();
+      state.mondoRidePending = null;
+      closePhone();
+      ui.notifications.info(`Mondo Rides: arrived at ${destination.name}.`);
+    } catch (error) {
+      console.error(`${MODULE_ID} | GM Mondo ride failed`, error);
+      state.mondoRidePending = null;
+      ui.notifications.error('Mondo Rides could not open that Scene.');
+      renderPhone();
+    }
+    return;
+  }
+
+  const dispatcher = getMondoDispatchGm();
+  if (!dispatcher) {
+    state.mondoRidePending = null;
+    ui.notifications.warn('Mondo Rides is unavailable because no GM is currently connected.');
+    renderPhone();
+    return;
+  }
+
+  game.socket.emit(SOCKET_NAME, {
+    type: 'mondo-ride-request',
+    requestId,
+    sceneId: destination.sceneId,
+    destinationName: destination.name,
+    requestingUserId: game.user.id,
+    authorUserId: game.user.id,
+    sentAt: Date.now()
+  });
+}
+
+async function handleMondoRideRequest(payload) {
+  if (!isMondoDispatchAuthority()) return;
+  if (!payload?.requestId || !payload.sceneId || !payload.requestingUserId) return;
+  if (payload.authorUserId !== payload.requestingUserId) return;
+
+  const destination = getMondoDestination(payload.sceneId);
+  const user = game.users.get(payload.requestingUserId);
+  const scene = game.scenes.get(payload.sceneId);
+  if (!destination || !user || !scene || !user.active) {
+    emitMondoRideResponse(payload, false, 'That destination is no longer available.');
+    return;
+  }
+
+  try {
+    if (typeof scene.pullUsers === 'function') {
+      scene.pullUsers([user]);
+      emitMondoRideResponse(payload, true, '', 'core-pull');
+    } else {
+      // Foundry v12 compatibility: approve the request and allow the requesting client to view the Scene.
+      emitMondoRideResponse(payload, true, '', 'client-view');
+    }
+  } catch (error) {
+    console.error(`${MODULE_ID} | Mondo Rides dispatch failed`, error);
+    emitMondoRideResponse(payload, false, 'The ride could not be dispatched.');
+  }
+}
+
+function emitMondoRideResponse(request, success, message = '', mode = '') {
+  if (!game.socket) return;
+  game.socket.emit(SOCKET_NAME, {
+    type: 'mondo-ride-response',
+    requestId: request.requestId,
+    sceneId: request.sceneId,
+    destinationName: request.destinationName || getMondoDestination(request.sceneId)?.name || 'destination',
+    targetUserId: request.requestingUserId,
+    success: Boolean(success),
+    message,
+    mode,
+    authorUserId: game.user.id,
+    sentAt: Date.now()
+  });
+}
+
+async function handleMondoRideResponse(payload) {
+  if (payload?.targetUserId !== game.user?.id) return;
+  if (!state.mondoRidePending || payload.requestId !== state.mondoRidePending.requestId) return;
+
+  const pending = state.mondoRidePending;
+  if (!payload.success) {
+    state.mondoRidePending = null;
+    ui.notifications.warn(payload.message || 'Mondo Rides could not complete that trip.');
+    if (state.phoneOpen && state.app === 'mondo') renderPhone();
+    return;
+  }
+
+  if (payload.mode === 'client-view') {
+    const scene = game.scenes.get(payload.sceneId);
+    if (!scene) {
+      state.mondoRidePending = null;
+      ui.notifications.error('Mondo Rides could not access that Scene on this client.');
+      if (state.phoneOpen && state.app === 'mondo') renderPhone();
+      return;
+    }
+    try {
+      await scene.view();
+    } catch (error) {
+      console.error(`${MODULE_ID} | Mondo Rides v12 client view failed`, error);
+      state.mondoRidePending = null;
+      ui.notifications.error('Mondo Rides could not open that Scene. On Foundry v12, make sure the Scene is accessible to players.');
+      if (state.phoneOpen && state.app === 'mondo') renderPhone();
+      return;
+    }
+  }
+
+  state.mondoRidePending = null;
+  closePhone();
+  ui.notifications.info(`Mondo Rides: arrived at ${payload.destinationName || pending.name}.`);
+}
+
+// ---------------------------
 // Maps app
 // ---------------------------
 
@@ -6734,6 +7171,16 @@ function emitTyping(active, context, identity) {
 
 function onSocketMessage(payload) {
   if (!payload) return;
+
+  if (payload.type === 'mondo-ride-request') {
+    void handleMondoRideRequest(payload);
+    return;
+  }
+
+  if (payload.type === 'mondo-ride-response') {
+    void handleMondoRideResponse(payload);
+    return;
+  }
 
   if (payload.type?.startsWith("call-")) {
     handleCallSignal(payload);
