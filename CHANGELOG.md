@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.1
+
+- Improved Browser shortcut tile labels so bookmark names appear clearly beneath each icon.
+- Increased bookmark label readability with brighter white text, stronger contrast, and larger sizing.
+- Allowed bookmark labels to wrap across two lines so longer names remain readable.
+- Existing Browser search, external links, and Journal rendering are unchanged.
+
 ## 1.4.0
 
 - Added the **Browser** app to the cellphone Home Screen.

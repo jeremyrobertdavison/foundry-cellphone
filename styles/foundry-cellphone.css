@@ -2359,13 +2359,20 @@
 }
 
 .fc-browser-shortcut-label {
-  max-width: 72px;
+  max-width: 76px;
+  min-height: 24px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(255,255,255,.82);
-  font-size: 9px;
-  font-weight: 700;
+  white-space: normal;
+  text-align: center;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.55);
+  font-size: 10px;
+  line-height: 1.15;
+  font-weight: 800;
 }
 
 .fc-browser-results {
