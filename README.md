@@ -2,11 +2,14 @@
 
 An immersive in-game cellphone interface for modern-day Foundry VTT campaigns.
 
-Version **1.4.0** adds a fourth cellphone app: **Browser**. The Browser combines GM-configured external website shortcuts with a permission-aware search of Foundry Journal text pages. External shortcuts open in the user’s real web browser in a new tab, while Journal search results stay inside the cellphone interface. Existing messaging, calls, Mission Log, Friendpage, and NPC roleplay features remain available.
+Version **1.5.0** adds a fifth cellphone app: **Notes**. Each Foundry user gets a private in-world notebook for creating, editing, and deleting personal notes. Notes persist with the world and are kept separate from other users in the phone interface. Browser, Friendpage, Mission Log, messaging, calls, and NPC roleplay remain available.
 
 ## Features
 
-- Cellphone **Home Screen** with Messages, Mission Log, Friendpage, and Browser apps
+- Cellphone **Home Screen** with Messages, Mission Log, Friendpage, Browser, and Notes apps
+- **Notes** app with private per-user note storage
+- Create, edit, and delete personal notes with titles and freeform text
+- Notes persist in the Foundry world and are hidden from the normal Foundry chat feed
 - **Browser** app with a generic faux-browser interface
 - GM-managed external website shortcut tiles
 - External shortcuts open in the user’s real browser in a new tab
@@ -29,6 +32,12 @@ Version **1.4.0** adds a fourth cellphone app: **Browser**. The Browser combines
 - **Mission Log** app with GM-managed public or restricted assignments
 - GM-triggered calls as NPC Actors
 - Existing message and mission history from earlier releases remains readable
+
+## Notes
+
+Open the cellphone and choose **Notes**. Notes are private to the current Foundry user inside the module interface. Each note has a title, body text, created time, and updated time. Users can create, edit, and delete their own notes.
+
+Notes are stored as module-owned, self-whispered Foundry records so they persist with the world while remaining hidden from the normal chat feed. They are intended for private in-game note taking, not encrypted secret storage from the server administrator.
 
 ## Browser
 
@@ -121,7 +130,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.4.0.zip
+foundry-cellphone-v1.5.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

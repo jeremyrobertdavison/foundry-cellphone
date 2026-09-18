@@ -2,6 +2,7 @@ const MODULE_ID = "foundry-cellphone";
 const PHONE_FLAG = "phoneMessage";
 const MISSION_FLAG = "missionRecord";
 const FRIENDPAGE_FLAG = "friendpageRecord";
+const NOTE_FLAG = "noteRecord";
 const NPC_CONTACTS_SETTING = "npcContacts";
 const MISSION_SEEN_SETTING = "missionSeen";
 const FRIENDPAGE_PROFILES_SETTING = "friendpageProfiles";
@@ -40,6 +41,9 @@ const state = {
   browserSearchResults: [],
   selectedBrowserPage: null,
   browserBookmarkManagerOpen: false,
+  selectedNoteId: null,
+  noteEditorOpen: false,
+  noteDraft: { title: "", body: "" },
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -136,6 +140,12 @@ Hooks.on("renderChatMessage", (message, html) => {
 });
 
 Hooks.on("createChatMessage", (message) => {
+  if (isNoteRecord(message)) {
+    const data = getNoteData(message);
+    if (data?.ownerUserId === game.user?.id) refreshAll();
+    return;
+  }
+
   if (isMissionRecord(message)) {
     const data = getMissionData(message);
     if (data && isMissionVisibleToCurrentUser(data)) refreshAll();
@@ -180,6 +190,12 @@ Hooks.on("createChatMessage", (message) => {
 });
 
 Hooks.on("updateChatMessage", (message) => {
+  if (isNoteRecord(message)) {
+    const data = getNoteData(message);
+    if (data?.ownerUserId === game.user?.id) refreshAll();
+    return;
+  }
+
   if (isMissionRecord(message)) {
     const data = getMissionData(message);
     if (data && state.phoneOpen && state.app === "missions" && state.selectedMissionId === data.id && !state.missionEditorOpen && isMissionVisibleToCurrentUser(data)) {
@@ -260,6 +276,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-browser"><i class="fa-solid fa-compass"></i></span>
               <span class="fc-app-label">Browser</span>
             </button>
+            <button class="fc-app-icon fc-app-icon-notes" type="button" data-app="notes">
+              <span class="fc-app-symbol fc-app-symbol-notes"><i class="fa-solid fa-note-sticky"></i></span>
+              <span class="fc-app-label">Notes</span>
+            </button>
           </div>
         </section>
 
@@ -337,6 +357,10 @@ function buildPhone() {
           <section class="fc-browser-view" hidden>
             <div class="fc-browser-content"></div>
           </section>
+
+          <section class="fc-notes-view" hidden>
+            <div class="fc-notes-content"></div>
+          </section>
         </main>
       </div>
 
@@ -404,7 +428,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -430,6 +454,10 @@ function openApp(app) {
     state.browserSearchResults = [];
     state.selectedBrowserPage = null;
     state.browserBookmarkManagerOpen = false;
+  } else if (app === 'notes') {
+    state.selectedNoteId = null;
+    state.noteEditorOpen = false;
+    resetNoteDraft();
   }
   renderPhone();
 }
@@ -447,6 +475,9 @@ function goHome() {
   state.browserSearchResults = [];
   state.selectedBrowserPage = null;
   state.browserBookmarkManagerOpen = false;
+  state.selectedNoteId = null;
+  state.noteEditorOpen = false;
+  resetNoteDraft();
   renderPhone();
 }
 
@@ -478,6 +509,18 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "notes") {
+    if (state.noteEditorOpen) {
+      state.noteEditorOpen = false;
+      state.selectedNoteId = null;
+      resetNoteDraft();
+      renderPhone();
+      return;
+    }
+    goHome();
+    return;
+  }
 
   if (state.app === "browser") {
     if (state.browserBookmarkManagerOpen) {
@@ -870,6 +913,7 @@ function renderPhone() {
   const missionView = state.root.querySelector(".fc-mission-view");
   const friendpageView = state.root.querySelector(".fc-friendpage-view");
   const browserView = state.root.querySelector(".fc-browser-view");
+  const notesView = state.root.querySelector(".fc-notes-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -883,6 +927,7 @@ function renderPhone() {
   missionView.hidden = true;
   friendpageView.hidden = true;
   browserView.hidden = true;
+  notesView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -919,6 +964,13 @@ function renderPhone() {
   if (state.app === "browser") {
     browserView.hidden = false;
     renderBrowserView();
+    updateBadges();
+    return;
+  }
+
+  if (state.app === "notes") {
+    notesView.hidden = false;
+    renderNotesView();
     updateBadges();
     return;
   }
@@ -973,6 +1025,13 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "notes") {
+    back.hidden = false;
+    title.textContent = state.noteEditorOpen ? (state.selectedNoteId ? "Edit Note" : "New Note") : "Notes";
+    subtitle.textContent = state.noteEditorOpen ? "Private phone note" : "Private to your account";
+    return;
+  }
 
   if (state.app === "browser") {
     back.hidden = false;
@@ -3238,8 +3297,231 @@ function renderBrowserBookmarkManager(container) {
   container.appendChild(form);
 }
 
+
+// ---------------------------
+// Notes app
+// ---------------------------
+
+function isNoteRecord(message) {
+  return Boolean(getNoteData(message));
+}
+
+function getNoteData(message) {
+  return message?.getFlag?.(MODULE_ID, NOTE_FLAG) ?? message?.flags?.[MODULE_ID]?.[NOTE_FLAG] ?? null;
+}
+
+function getNoteRecords() {
+  return game.messages.contents
+    .filter(isNoteRecord)
+    .map((document) => ({ document, data: getNoteData(document) }))
+    .filter((record) => record.data?.ownerUserId === game.user?.id)
+    .sort((a, b) => Number(b.data.updatedAt || 0) - Number(a.data.updatedAt || 0));
+}
+
+function getNoteById(id) {
+  return getNoteRecords().find((record) => record.data.id === id) ?? null;
+}
+
+function resetNoteDraft(data = null) {
+  state.noteDraft = {
+    title: data?.title || "",
+    body: data?.body || ""
+  };
+}
+
+function renderNotesView() {
+  const container = state.root.querySelector('.fc-notes-content');
+  container.replaceChildren();
+  if (state.noteEditorOpen) renderNoteEditor(container);
+  else renderNoteList(container);
+}
+
+function renderNoteList(container) {
+  const privacy = document.createElement('div');
+  privacy.className = 'fc-note-privacy';
+  privacy.innerHTML = '<i class="fa-solid fa-lock"></i><span>Your notes are visible only to your Foundry user.</span>';
+  container.appendChild(privacy);
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'fc-manager-button fc-note-add';
+  add.innerHTML = '<i class="fa-solid fa-plus"></i><span>New Note</span>';
+  add.addEventListener('click', () => {
+    state.selectedNoteId = null;
+    resetNoteDraft();
+    state.noteEditorOpen = true;
+    renderPhone();
+  });
+  container.appendChild(add);
+
+  const notes = getNoteRecords();
+  if (!notes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fc-note-empty';
+    empty.innerHTML = '<i class="fa-regular fa-note-sticky"></i><strong>No notes yet</strong><span>Tap New Note to jot something down.</span>';
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const record of notes) {
+    const { data } = record;
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'fc-note-card';
+
+    const title = document.createElement('div');
+    title.className = 'fc-note-card-title';
+    title.textContent = data.title || 'Untitled Note';
+
+    const preview = document.createElement('div');
+    preview.className = 'fc-note-card-preview';
+    preview.textContent = truncate(String(data.body || '').replace(/\s+/g, ' ').trim() || 'Empty note', 92);
+
+    const meta = document.createElement('div');
+    meta.className = 'fc-note-card-meta';
+    meta.textContent = `Updated ${formatNoteDate(data.updatedAt || data.createdAt)}`;
+
+    card.append(title, preview, meta);
+    card.addEventListener('click', () => {
+      state.selectedNoteId = data.id;
+      resetNoteDraft(data);
+      state.noteEditorOpen = true;
+      renderPhone();
+    });
+    container.appendChild(card);
+  }
+}
+
+function renderNoteEditor(container) {
+  const form = document.createElement('form');
+  form.className = 'fc-note-form';
+
+  const privacy = document.createElement('div');
+  privacy.className = 'fc-note-privacy';
+  privacy.innerHTML = '<i class="fa-solid fa-lock"></i><span>Private note</span>';
+
+  const titleLabel = document.createElement('label');
+  titleLabel.className = 'fc-note-field';
+  titleLabel.textContent = 'Title';
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.maxLength = 100;
+  titleInput.placeholder = 'Note title';
+  titleInput.value = state.noteDraft.title;
+  titleLabel.appendChild(titleInput);
+
+  const bodyLabel = document.createElement('label');
+  bodyLabel.className = 'fc-note-field';
+  bodyLabel.textContent = 'Note';
+  const bodyInput = document.createElement('textarea');
+  bodyInput.rows = 11;
+  bodyInput.maxLength = 12000;
+  bodyInput.placeholder = 'Write your note...';
+  bodyInput.value = state.noteDraft.body;
+  bodyLabel.appendChild(bodyInput);
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'fc-create-group-button fc-note-save';
+  save.innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>Save Note</span>';
+
+  form.append(privacy, titleLabel, bodyLabel, save);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    state.noteDraft.title = titleInput.value;
+    state.noteDraft.body = bodyInput.value;
+    save.disabled = true;
+    try {
+      await saveNoteDraft();
+    } finally {
+      save.disabled = false;
+    }
+  });
+  container.appendChild(form);
+
+  if (state.selectedNoteId) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'fc-manager-button fc-note-delete';
+    del.innerHTML = '<i class="fa-solid fa-trash"></i><span>Delete Note</span>';
+    del.addEventListener('click', () => deleteSelectedNote());
+    container.appendChild(del);
+  }
+
+  requestAnimationFrame(() => (state.selectedNoteId ? bodyInput : titleInput).focus());
+}
+
+async function saveNoteDraft() {
+  const body = String(state.noteDraft.body || '').trim();
+  let title = String(state.noteDraft.title || '').trim();
+  if (!title && !body) {
+    ui.notifications.warn('Write something before saving the note.');
+    return;
+  }
+  if (!title) title = truncate(body.split(/\r?\n/)[0] || 'Untitled Note', 60);
+
+  const existing = state.selectedNoteId ? getNoteById(state.selectedNoteId) : null;
+  const now = Date.now();
+  const data = {
+    schema: 1,
+    id: existing?.data?.id || makeId(),
+    ownerUserId: game.user.id,
+    title,
+    body: String(state.noteDraft.body || ''),
+    createdAt: existing?.data?.createdAt || now,
+    updatedAt: now
+  };
+
+  try {
+    if (existing) {
+      await existing.document.update({
+        content: `[Phone Note] ${formatSafeChatContent(title)}`,
+        [`flags.${MODULE_ID}.${NOTE_FLAG}`]: data
+      });
+    } else {
+      await createChatMessageDocument({
+        content: `[Phone Note] ${formatSafeChatContent(title)}`,
+        speaker: { alias: 'Notes' },
+        whisper: [game.user.id],
+        flags: { [MODULE_ID]: { [NOTE_FLAG]: data } }
+      });
+    }
+    state.selectedNoteId = null;
+    state.noteEditorOpen = false;
+    resetNoteDraft();
+    ui.notifications.info(existing ? 'Note updated.' : 'Note saved.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to save note`, error);
+    ui.notifications.error('The note could not be saved. Check the console for details.');
+  }
+}
+
+async function deleteSelectedNote() {
+  if (!state.selectedNoteId) return;
+  const record = getNoteById(state.selectedNoteId);
+  if (!record) return;
+  const confirmed = window.confirm(`Delete "${record.data.title || 'Untitled Note'}"?`);
+  if (!confirmed) return;
+  try {
+    await record.document.delete();
+    state.selectedNoteId = null;
+    state.noteEditorOpen = false;
+    resetNoteDraft();
+    ui.notifications.info('Note deleted.');
+    renderPhone();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to delete note`, error);
+    ui.notifications.error('The note could not be deleted. Check the console for details.');
+  }
+}
+
+function formatNoteDate(timestamp) {
+  return new Date(Number(timestamp) || Date.now()).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 function isInternalPhoneRecord(message) {
-  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message);
+  return isPhoneMessage(message) || isMissionRecord(message) || isFriendpageRecord(message) || isNoteRecord(message);
 }
 
 function isMissionRecord(message) {

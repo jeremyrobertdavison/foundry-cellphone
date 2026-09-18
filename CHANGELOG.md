@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.0
+
+- Added the **Notes** app to the cellphone Home Screen.
+- Each Foundry user has their own private note collection.
+- Users can create, edit, and delete notes with a title and freeform body text.
+- Notes persist in the Foundry world as self-whispered module records and are hidden from the normal Foundry chat feed.
+- Notes are filtered to the owning Foundry user and are not exposed through the Notes interface to other players.
+- Added note previews and last-updated timestamps to the Notes list.
+- Existing Messages, calls, Mission Log, Friendpage, Browser, and NPC features remain unchanged.
+
 ## 1.4.1
 
 - Improved Browser shortcut tile labels so bookmark names appear clearly beneath each icon.
