@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.2
+
+- Added GM-managed **active Friendpage profiles**.
+- By default, existing Foundry user profiles remain active for backwards compatibility until the GM saves a custom profile list.
+- GMs can enable or disable individual Foundry user profiles and unassigned NPC Actor profiles.
+- Enabled NPC Actors receive full Friendpage profiles and public walls.
+- Added a GM-only **Posting as** selector for switching between the GM identity and enabled NPC Friendpage identities.
+- NPC identities can publish statuses, post on other profiles, comment, Like, and Dislike.
+- Players can browse enabled NPC profiles and post directly to NPC walls.
+- Reactions are now one-per-Friendpage-profile-per-post, allowing multiple NPC identities controlled by the same GM to react independently.
+- Existing v1.3.0/v1.3.1 Friendpage posts, comments, and reactions remain readable without migration.
+- Friendpage records now use identity-aware schema v2 for new NPC-aware activity while retaining legacy user-ID compatibility.
+
 ## 1.3.1
 
 - Added compact sender identity strips to group-chat bubbles.

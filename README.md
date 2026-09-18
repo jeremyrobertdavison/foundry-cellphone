@@ -2,18 +2,20 @@
 
 An immersive in-game cellphone interface for modern-day Foundry VTT campaigns.
 
-Version **1.3.1** adds clearer group-chat sender identity while retaining **Friendpage**, an in-world social-media app built directly into the cellphone Home Screen. Existing messaging, NPC roleplay, typing indicators, calls, and Mission Log features remain available.
+Version **1.3.2** expands **Friendpage** with GM-managed active profiles and full NPC social identities. The GM can choose which player/user and NPC Actor profiles exist on Friendpage, then post, comment, Like, and Dislike as enabled NPCs. Existing messaging, NPC roleplay, typing indicators, calls, Mission Log, and Friendpage history remain available.
 
 ## Features
 
 - Cellphone **Home Screen** with Messages, Mission Log, and Friendpage apps
-- **Friendpage global feed** showing public posts from every Foundry user
-- A **profile and wall** for every user, using the assigned character name and portrait when available
+- **Friendpage global feed** showing public posts from active Friendpage profiles
+- GM-managed **active profile list** for Foundry users and NPC Actors
+- A **profile and wall** for every enabled user or NPC identity, using assigned character/Actor names and portraits
+- GM-only **Posting as** selector for enabled NPC social identities
 - Post a status to your own wall
 - Write a public post on another user's wall
 - Public comments on Friendpage posts
 - Like and dislike reactions with live counts
-- One active reaction per user per post; clicking the same reaction again removes it, and choosing the opposite reaction switches it
+- One active reaction per Friendpage profile per post; NPC identities controlled by the GM react independently
 - Click a post author or wall recipient to jump directly to that profile
 - Persistent Friendpage history stored as module-owned Foundry records and hidden from the normal Foundry chat feed
 - **Messages** app with Party Chat, custom groups, DMs, NPC texting, typing indicators, and calls
@@ -41,20 +43,26 @@ All Friendpage content is public to the Foundry world. It is intended as in-char
 
 ### Profiles and walls
 
-Choose **Profiles** to browse the users in the world. Friendpage uses the user's assigned Foundry character name and portrait when one is available, falling back to the Foundry username/avatar otherwise.
+Choose **Profiles** to browse every identity the GM has enabled for Friendpage. User profiles use the assigned Foundry character name and portrait when one is available, falling back to the Foundry username/avatar otherwise. NPC profiles use the Actor name and portrait.
 
-Open a profile to view that user's wall. From there you can publish directly to their wall.
+Open a profile to view that profile's wall. Any user with an active Friendpage identity can publish directly to an enabled player or NPC wall.
+
+### GM profile management and NPC posting
+
+GMs have a **Manage Profiles** control on the Profiles tab. Before the GM saves a custom profile configuration, all Foundry user profiles remain enabled for compatibility with earlier Friendpage releases. The GM can then explicitly enable or disable user profiles and unassigned NPC Actor profiles.
+
+When one or more NPC profiles are active, the GM receives a **Posting as** selector. Switching this selector changes the identity used for new Friendpage statuses, wall posts, comments, Likes, and Dislikes. A single GM can therefore roleplay several NPC social accounts independently.
 
 ### Reactions
 
-Each user has one current reaction per post. A user can:
+Each active Friendpage profile has one current reaction per post. A profile can:
 
 - Like a post
 - Dislike a post
 - Switch between Like and Dislike
 - Click the active reaction again to remove it
 
-Reaction counts are calculated from the latest reaction state for each user.
+Reaction counts are calculated from the latest reaction state for each active profile. This means two NPC profiles controlled by the same GM can each react separately.
 
 ## Mission Log
 
@@ -93,7 +101,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v1.3.1.zip
+foundry-cellphone-v1.3.2.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md
