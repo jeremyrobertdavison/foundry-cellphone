@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.2.0
+
+- Added the **Music** cellphone app with a generic streaming-service-inspired interface.
+- Music shows the currently playing Foundry Playlist track and its parent playlist, plus additional simultaneous tracks when applicable.
+- Added a personal **Your Music Volume** slider backed by Foundry's client-side global Playlist volume control.
+- Added a mute/restore button; the Music app never changes another user's volume or grants player playback control.
+- Music refreshes when Foundry Playlist/PlaylistSound playback records change.
+- Added **Block Drop** as the seventh Arcade game, a generic falling-block puzzle inspired by classic block-stacking games.
+- Block Drop includes seven block shapes, rotation, soft drop, hard drop, row clearing, increasing speed, score/line tracking, on-screen controls, keyboard controls, pause/resume, and a local best score.
+- Block Drop automatically pauses when leaving Arcade, closing the phone, or when a cellphone call interrupts play.
+- The Home Screen now has ten apps in a balanced two-column layout, pairing Mondo Rides with Music on the final row.
+
+## 2.1.0
+
+- Added **Stack It** as the sixth Arcade game.
+- Stack moving blocks by tapping/clicking the board, using the Place button, or pressing Space/Enter.
+- Each successful placement trims unsupported overhang; a complete miss ends the run.
+- The block speed increases gradually as the tower grows.
+- Added pause/resume, New Game, score, and local best-stack tracking.
+- Stack It automatically pauses when leaving Arcade, closing the phone, or when a cellphone call interrupts play.
+- Existing Arcade games and all other cellphone apps are unchanged.
+
 ## 2.0.2
 
 - Changed the Maps app so clicking a map opens it in a much larger dedicated overlay window instead of enlarging it inside the phone.

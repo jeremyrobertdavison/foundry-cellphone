@@ -23,6 +23,10 @@ const SNAKE_TICK_MS = 175;
 const MINESWEEPER_SIZE = 8;
 const MINESWEEPER_MINE_COUNT = 10;
 const RUNNER_TICK_MS = 50;
+const STACK_IT_TICK_MS = 35;
+const BLOCK_DROP_WIDTH = 10;
+const BLOCK_DROP_HEIGHT = 20;
+const BLOCK_DROP_BASE_TICK_MS = 550;
 
 const state = {
   phoneOpen: false,
@@ -79,6 +83,10 @@ const state = {
   minesweeper: { cells: [], status: "ready", flagMode: false, minesPlaced: false },
   runner: { running: false, paused: false, gameOver: false, interval: null, playerY: 0, velocityY: 0, obstacles: [], score: 0, ticks: 0, spawnIn: 34 },
   guessNumber: { target: Math.floor(Math.random() * 100) + 1, attempts: 0, status: "playing", feedback: "I picked a number from 1 to 100." },
+  stackIt: { layers: [], moving: null, running: false, paused: false, gameOver: false, interval: null, score: 0, direction: 1, speed: 1.25 },
+  blockDrop: { board: [], current: null, next: null, running: false, paused: false, gameOver: false, interval: null, score: 0, lines: 0 },
+  musicLastVolume: 0.7,
+  musicVolumeTimer: null,
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -157,7 +165,7 @@ Hooks.once("init", () => {
     scope: "client",
     config: false,
     type: Object,
-    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0 },
+    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0 },
     onChange: () => refreshAll()
   });
 
@@ -290,6 +298,13 @@ Hooks.on("deleteChatMessage", (message) => {
 
 Hooks.on("userConnected", () => refreshAll());
 
+// Keep the Music app in sync with Foundry's native playlist playback.
+for (const hookName of ["createPlaylistSound", "updatePlaylistSound", "deletePlaylistSound", "updatePlaylist"]) {
+  Hooks.on(hookName, () => {
+    if (state.phoneOpen && state.app === "music") refreshAll();
+  });
+}
+
 function buildLauncher() {
   if (document.getElementById(`${MODULE_ID}-launcher`)) return;
 
@@ -371,6 +386,10 @@ function buildPhone() {
             <button class="fc-app-icon fc-app-icon-mondo" type="button" data-app="mondo">
               <span class="fc-app-symbol fc-app-symbol-mondo"><i class="fa-solid fa-car-side"></i></span>
               <span class="fc-app-label">Mondo Rides</span>
+            </button>
+            <button class="fc-app-icon fc-app-icon-music" type="button" data-app="music">
+              <span class="fc-app-symbol fc-app-symbol-music"><i class="fa-solid fa-headphones"></i></span>
+              <span class="fc-app-label">Music</span>
             </button>
           </div>
         </section>
@@ -469,6 +488,10 @@ function buildPhone() {
           <section class="fc-mondo-view" hidden>
             <div class="fc-mondo-content"></div>
           </section>
+
+          <section class="fc-music-view" hidden>
+            <div class="fc-music-content"></div>
+          </section>
         </main>
       </div>
 
@@ -537,7 +560,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo', 'music'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -583,6 +606,8 @@ function openApp(app) {
   } else if (app === 'mondo') {
     state.mondoManagerOpen = false;
     state.mondoRidePending = null;
+  } else if (app === 'music') {
+    // Music mirrors Foundry's native playlist state; no per-app reset is needed.
   }
   renderPhone();
 }
@@ -648,6 +673,11 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "music") {
+    goHome();
+    return;
+  }
 
   if (state.app === "mondo") {
     if (state.mondoManagerOpen) {
@@ -1113,6 +1143,7 @@ function renderPhone() {
   const arcadeView = state.root.querySelector(".fc-arcade-view");
   const mapsView = state.root.querySelector(".fc-maps-view");
   const mondoView = state.root.querySelector(".fc-mondo-view");
+  const musicView = state.root.querySelector(".fc-music-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -1131,6 +1162,7 @@ function renderPhone() {
   arcadeView.hidden = true;
   mapsView.hidden = true;
   mondoView.hidden = true;
+  musicView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -1199,6 +1231,13 @@ function renderPhone() {
     return;
   }
 
+  if (state.app === "music") {
+    musicView.hidden = false;
+    renderMusicView();
+    updateBadges();
+    return;
+  }
+
   if (state.app === "mondo") {
     mondoView.hidden = false;
     renderMondoRidesView();
@@ -1257,6 +1296,13 @@ function updateHeader() {
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
 
+  if (state.app === "music") {
+    back.hidden = false;
+    title.textContent = "Music";
+    subtitle.textContent = "Now playing in Foundry";
+    return;
+  }
+
   if (state.app === "mondo") {
     back.hidden = false;
     title.textContent = state.mondoManagerOpen ? "Mondo Destinations" : "Mondo Rides";
@@ -1282,7 +1328,7 @@ function updateHeader() {
 
   if (state.app === "arcade") {
     back.hidden = false;
-    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", guessnumber: "Guess My Number" };
+    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop" };
     title.textContent = arcadeTitles[state.arcadeGame] || "Arcade";
     subtitle.textContent = state.arcadeGame === "menu" ? "Pick a game" : "Cellphone games";
     return;
@@ -5942,7 +5988,7 @@ async function deleteSelectedMap() {
 }
 
 // ---------------------------
-// Arcade app: Snake + Tic Tac Toe
+// Arcade app
 // ---------------------------
 
 function getArcadeStats() {
@@ -5955,7 +6001,9 @@ function getArcadeStats() {
     minesweeperWins: Number(raw.minesweeperWins || 0),
     runnerBest: Number(raw.runnerBest || 0),
     guessNumberWins: Number(raw.guessNumberWins || 0),
-    guessNumberBestAttempts: Number(raw.guessNumberBestAttempts || 0)
+    guessNumberBestAttempts: Number(raw.guessNumberBestAttempts || 0),
+    stackItBest: Number(raw.stackItBest || 0),
+    blockDropBest: Number(raw.blockDropBest || 0)
   };
 }
 
@@ -5993,13 +6041,21 @@ function renderArcadeView() {
     renderGuessNumber(container);
     return;
   }
+  if (state.arcadeGame === 'stackit') {
+    renderStackItGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'blockdrop') {
+    renderBlockDropGame(container);
+    return;
+  }
   renderArcadeMenu(container);
 }
 
 function renderArcadeMenu(container) {
   const intro = document.createElement('div');
   intro.className = 'fc-arcade-intro';
-  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Five quick games for downtime between scenes.</span></div>';
+  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Seven quick games for downtime between scenes.</span></div>';
   container.appendChild(intro);
 
   const stats = getArcadeStats();
@@ -6076,13 +6132,43 @@ function renderArcadeMenu(container) {
     renderPhone();
   });
 
-  grid.append(snake, ttt, mines, runner, guess);
+  const stack = document.createElement('button');
+  stack.type = 'button';
+  stack.className = 'fc-arcade-game-card';
+  stack.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-stack"><i class="fa-solid fa-layer-group"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Stack It</strong><small>Best stack: ${stats.stackItBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  stack.addEventListener('click', () => {
+    state.arcadeGame = 'stackit';
+    if (!state.stackIt.layers.length || state.stackIt.gameOver) resetStackItGame();
+    renderPhone();
+  });
+
+  const blockDrop = document.createElement('button');
+  blockDrop.type = 'button';
+  blockDrop.className = 'fc-arcade-game-card';
+  blockDrop.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-blockdrop"><i class="fa-solid fa-cubes-stacked"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Block Drop</strong><small>Best score: ${stats.blockDropBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  blockDrop.addEventListener('click', () => {
+    state.arcadeGame = 'blockdrop';
+    if (!state.blockDrop.board.length || state.blockDrop.gameOver) resetBlockDropGame();
+    renderPhone();
+  });
+
+  grid.append(snake, ttt, mines, runner, guess, stack, blockDrop);
   container.appendChild(grid);
 }
 
 function pauseArcadeActionGames() {
   pauseSnakeGame();
   pauseRunnerGame();
+  pauseStackItGame();
+  pauseBlockDropGame();
 }
 
 function resetSnakeGame() {
@@ -6287,6 +6373,33 @@ function onArcadeKeydown(event) {
   if (state.arcadeGame === 'runner' && [' ', 'ArrowUp', 'w', 'W'].includes(event.key)) {
     event.preventDefault();
     jumpRunner();
+    return;
+  }
+
+  if (state.arcadeGame === 'blockdrop') {
+    const key = event.key;
+    if (['ArrowLeft', 'a', 'A'].includes(key)) { event.preventDefault(); moveBlockDrop(-1, 0); }
+    else if (['ArrowRight', 'd', 'D'].includes(key)) { event.preventDefault(); moveBlockDrop(1, 0); }
+    else if (['ArrowDown', 's', 'S'].includes(key)) { event.preventDefault(); softDropBlockDrop(); }
+    else if (['ArrowUp', 'w', 'W'].includes(key)) { event.preventDefault(); rotateBlockDrop(); }
+    else if (key === ' ') { event.preventDefault(); hardDropBlockDrop(); }
+    else if (key === 'p' || key === 'P') {
+      event.preventDefault();
+      if (state.blockDrop.running) pauseBlockDropGame();
+      else if (!state.blockDrop.gameOver) startBlockDropGame();
+    }
+    return;
+  }
+
+  if (state.arcadeGame === 'stackit') {
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
+      stackItAction();
+    } else if (event.key === 'p' || event.key === 'P') {
+      event.preventDefault();
+      if (state.stackIt.running) pauseStackItGame();
+      else if (!state.stackIt.gameOver) startStackItGame();
+    }
   }
 }
 
@@ -6783,6 +6896,605 @@ function renderGuessNumber(container) {
   });
   shell.querySelector('.fc-guess-new').addEventListener('click', () => { resetGuessNumber(); renderPhone(); });
   if (state.guessNumber.status === 'won') input.disabled = true;
+}
+
+// ---------------------------
+// Stack It
+// ---------------------------
+
+function resetStackItGame() {
+  stopStackItInterval();
+  const baseWidth = 64;
+  state.stackIt.layers = [{ x: (100 - baseWidth) / 2, width: baseWidth }];
+  state.stackIt.moving = { x: 0, width: baseWidth };
+  state.stackIt.running = false;
+  state.stackIt.paused = false;
+  state.stackIt.gameOver = false;
+  state.stackIt.score = 0;
+  state.stackIt.direction = 1;
+  state.stackIt.speed = 1.25;
+}
+
+function startStackItGame() {
+  if (state.stackIt.gameOver || !state.stackIt.layers.length) resetStackItGame();
+  state.stackIt.running = true;
+  state.stackIt.paused = false;
+  stopStackItInterval();
+  state.stackIt.interval = window.setInterval(stackItStep, STACK_IT_TICK_MS);
+  updateStackItBoard();
+}
+
+function pauseStackItGame() {
+  if (!state.stackIt) return;
+  if (state.stackIt.running) {
+    state.stackIt.running = false;
+    state.stackIt.paused = true;
+  }
+  stopStackItInterval();
+  const stats = getArcadeStats();
+  if (state.stackIt.score > stats.stackItBest) void saveArcadeStats({ stackItBest: state.stackIt.score });
+  if (state.phoneOpen && state.app === 'arcade' && state.arcadeGame === 'stackit' && !state.call) updateStackItBoard();
+}
+
+function stopStackItInterval() {
+  if (state.stackIt?.interval) {
+    window.clearInterval(state.stackIt.interval);
+    state.stackIt.interval = null;
+  }
+}
+
+function stackItStep() {
+  if (!state.stackIt.running || state.call || !state.stackIt.moving) return;
+  const moving = state.stackIt.moving;
+  const maxX = Math.max(0, 100 - moving.width);
+  moving.x += state.stackIt.speed * state.stackIt.direction;
+  if (moving.x <= 0) {
+    moving.x = 0;
+    state.stackIt.direction = 1;
+  } else if (moving.x >= maxX) {
+    moving.x = maxX;
+    state.stackIt.direction = -1;
+  }
+  updateStackItBoard();
+}
+
+function stackItAction() {
+  if (state.stackIt.gameOver) {
+    resetStackItGame();
+    startStackItGame();
+    return;
+  }
+  if (!state.stackIt.running) {
+    startStackItGame();
+    return;
+  }
+  placeStackItBlock();
+}
+
+function placeStackItBlock() {
+  const moving = state.stackIt.moving;
+  const top = state.stackIt.layers.at(-1);
+  if (!moving || !top) return;
+
+  const perfectTolerance = 1.1;
+  let x = moving.x;
+  let width = moving.width;
+  if (Math.abs(moving.x - top.x) <= perfectTolerance && Math.abs(moving.width - top.width) <= perfectTolerance) {
+    x = top.x;
+    width = top.width;
+  } else {
+    const left = Math.max(moving.x, top.x);
+    const right = Math.min(moving.x + moving.width, top.x + top.width);
+    width = right - left;
+    x = left;
+  }
+
+  if (width <= 0) {
+    finishStackItGame();
+    return;
+  }
+
+  state.stackIt.layers.push({ x, width });
+  state.stackIt.score += 1;
+  state.stackIt.speed = Math.min(3.25, 1.25 + state.stackIt.score * 0.085);
+  state.stackIt.direction = state.stackIt.score % 2 === 0 ? 1 : -1;
+  state.stackIt.moving = {
+    x: state.stackIt.direction > 0 ? 0 : Math.max(0, 100 - width),
+    width
+  };
+  updateStackItBoard();
+}
+
+function finishStackItGame() {
+  state.stackIt.running = false;
+  state.stackIt.paused = false;
+  state.stackIt.gameOver = true;
+  stopStackItInterval();
+  const stats = getArcadeStats();
+  if (state.stackIt.score > stats.stackItBest) void saveArcadeStats({ stackItBest: state.stackIt.score });
+  updateStackItBoard();
+}
+
+function renderStackItGame(container) {
+  if (!state.stackIt.layers.length) resetStackItGame();
+  const stats = getArcadeStats();
+  const shell = document.createElement('div');
+  shell.className = 'fc-stack-shell';
+  shell.innerHTML = `
+    <div class="fc-arcade-scorebar"><span>Stack <strong class="fc-stack-score">${state.stackIt.score}</strong></span><span>Best <strong class="fc-stack-best">${Math.max(stats.stackItBest, state.stackIt.score)}</strong></span></div>
+    <div class="fc-stack-board" tabindex="0" role="button" aria-label="Stack It game board. Tap to start and place blocks.">
+      <div class="fc-stack-layers"></div>
+      <div class="fc-stack-horizon"></div>
+    </div>
+    <div class="fc-stack-status"></div>
+    <div class="fc-stack-actions">
+      <button type="button" class="fc-arcade-primary fc-stack-place"><i class="fa-solid fa-layer-group"></i> Start</button>
+      <button type="button" class="fc-arcade-secondary fc-stack-pause"><i class="fa-solid fa-pause"></i> Pause</button>
+      <button type="button" class="fc-arcade-secondary fc-stack-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+    </div>
+  `;
+  container.appendChild(shell);
+  shell.querySelector('.fc-stack-board').addEventListener('click', stackItAction);
+  shell.querySelector('.fc-stack-place').addEventListener('click', stackItAction);
+  shell.querySelector('.fc-stack-pause').addEventListener('click', () => {
+    if (state.stackIt.gameOver) return;
+    if (state.stackIt.running) pauseStackItGame();
+    else startStackItGame();
+  });
+  shell.querySelector('.fc-stack-new').addEventListener('click', () => {
+    resetStackItGame();
+    updateStackItBoard();
+  });
+  updateStackItBoard();
+}
+
+function updateStackItBoard() {
+  const board = state.root?.querySelector('.fc-stack-board');
+  if (!board) return;
+  const layerHost = board.querySelector('.fc-stack-layers');
+  if (!layerHost) return;
+  layerHost.replaceChildren();
+
+  const maxVisiblePlaced = 10;
+  const visible = state.stackIt.layers.slice(-maxVisiblePlaced);
+  visible.forEach((layer, index) => {
+    const el = document.createElement('span');
+    el.className = 'fc-stack-block is-placed';
+    el.style.left = `${Math.max(0, Math.min(100, layer.x))}%`;
+    el.style.width = `${Math.max(0, Math.min(100, layer.width))}%`;
+    el.style.bottom = `${12 + index * 15}px`;
+    layerHost.appendChild(el);
+  });
+
+  if (!state.stackIt.gameOver && state.stackIt.moving) {
+    const moving = document.createElement('span');
+    moving.className = 'fc-stack-block is-moving';
+    moving.style.left = `${Math.max(0, Math.min(100, state.stackIt.moving.x))}%`;
+    moving.style.width = `${Math.max(0, Math.min(100, state.stackIt.moving.width))}%`;
+    moving.style.bottom = `${12 + visible.length * 15}px`;
+    layerHost.appendChild(moving);
+  }
+
+  const score = state.root?.querySelector('.fc-stack-score');
+  const best = state.root?.querySelector('.fc-stack-best');
+  if (score) score.textContent = String(state.stackIt.score);
+  if (best) best.textContent = String(Math.max(getArcadeStats().stackItBest, state.stackIt.score));
+
+  const status = state.root?.querySelector('.fc-stack-status');
+  if (status) {
+    if (state.stackIt.gameOver) status.textContent = `Missed it — you stacked ${state.stackIt.score} blocks.`;
+    else if (state.stackIt.paused) status.textContent = 'Paused — resume when you are ready.';
+    else if (!state.stackIt.running) status.textContent = 'Tap Start, the board, Space, or Enter.';
+    else status.textContent = 'Tap or press Space when the moving block lines up.';
+  }
+
+  const place = state.root?.querySelector('.fc-stack-place');
+  if (place) {
+    if (state.stackIt.gameOver) place.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Play Again';
+    else if (state.stackIt.running) place.innerHTML = '<i class="fa-solid fa-layer-group"></i> Place';
+    else place.innerHTML = '<i class="fa-solid fa-play"></i> Start';
+  }
+  const pause = state.root?.querySelector('.fc-stack-pause');
+  if (pause) {
+    pause.disabled = state.stackIt.gameOver;
+    pause.innerHTML = state.stackIt.paused ? '<i class="fa-solid fa-play"></i> Resume' : '<i class="fa-solid fa-pause"></i> Pause';
+  }
+}
+
+// ---------------------------
+// Block Drop
+// ---------------------------
+
+const BLOCK_DROP_PIECES = [
+  { type: 1, cells: [[0,1],[1,1],[2,1],[3,1]] },
+  { type: 2, cells: [[0,0],[1,0],[0,1],[1,1]] },
+  { type: 3, cells: [[1,0],[0,1],[1,1],[2,1]] },
+  { type: 4, cells: [[1,0],[2,0],[0,1],[1,1]] },
+  { type: 5, cells: [[0,0],[1,0],[1,1],[2,1]] },
+  { type: 6, cells: [[0,0],[0,1],[1,1],[2,1]] },
+  { type: 7, cells: [[2,0],[0,1],[1,1],[2,1]] }
+];
+
+function randomBlockDropPiece() {
+  const source = BLOCK_DROP_PIECES[Math.floor(Math.random() * BLOCK_DROP_PIECES.length)];
+  return { type: source.type, cells: source.cells.map(([x,y]) => [x,y]), x: 0, y: 0 };
+}
+
+function normalizeBlockDropCells(cells) {
+  const minX = Math.min(...cells.map(([x]) => x));
+  const minY = Math.min(...cells.map(([,y]) => y));
+  return cells.map(([x,y]) => [x - minX, y - minY]);
+}
+
+function rotatedBlockDropCells(cells) {
+  const normalized = normalizeBlockDropCells(cells);
+  const maxX = Math.max(...normalized.map(([x]) => x));
+  const maxY = Math.max(...normalized.map(([,y]) => y));
+  const size = Math.max(maxX, maxY);
+  return normalizeBlockDropCells(normalized.map(([x,y]) => [size - y, x]));
+}
+
+function resetBlockDropGame() {
+  stopBlockDropInterval();
+  state.blockDrop.board = Array.from({ length: BLOCK_DROP_HEIGHT }, () => Array(BLOCK_DROP_WIDTH).fill(0));
+  state.blockDrop.current = null;
+  state.blockDrop.next = randomBlockDropPiece();
+  state.blockDrop.running = false;
+  state.blockDrop.paused = false;
+  state.blockDrop.gameOver = false;
+  state.blockDrop.score = 0;
+  state.blockDrop.lines = 0;
+  spawnBlockDropPiece();
+}
+
+function spawnBlockDropPiece() {
+  const piece = state.blockDrop.next || randomBlockDropPiece();
+  state.blockDrop.next = randomBlockDropPiece();
+  const width = Math.max(...piece.cells.map(([x]) => x)) + 1;
+  state.blockDrop.current = { ...piece, cells: piece.cells.map(([x,y]) => [x,y]), x: Math.floor((BLOCK_DROP_WIDTH - width) / 2), y: 0 };
+  if (blockDropCollides(state.blockDrop.current, 0, 0, state.blockDrop.current.cells)) finishBlockDropGame();
+}
+
+function blockDropCollides(piece, dx = 0, dy = 0, cells = piece?.cells) {
+  if (!piece || !cells) return true;
+  for (const [cx, cy] of cells) {
+    const x = piece.x + dx + cx;
+    const y = piece.y + dy + cy;
+    if (x < 0 || x >= BLOCK_DROP_WIDTH || y >= BLOCK_DROP_HEIGHT) return true;
+    if (y >= 0 && state.blockDrop.board[y]?.[x]) return true;
+  }
+  return false;
+}
+
+function getBlockDropTickMs() {
+  return Math.max(140, BLOCK_DROP_BASE_TICK_MS - Math.floor(state.blockDrop.lines / 5) * 45);
+}
+
+function startBlockDropGame() {
+  if (!state.blockDrop.board.length || state.blockDrop.gameOver) resetBlockDropGame();
+  state.blockDrop.running = true;
+  state.blockDrop.paused = false;
+  restartBlockDropInterval();
+  updateBlockDropBoard();
+}
+
+function restartBlockDropInterval() {
+  stopBlockDropInterval();
+  if (!state.blockDrop.running) return;
+  state.blockDrop.interval = window.setInterval(blockDropStep, getBlockDropTickMs());
+}
+
+function pauseBlockDropGame() {
+  if (!state.blockDrop) return;
+  if (state.blockDrop.running) {
+    state.blockDrop.running = false;
+    state.blockDrop.paused = true;
+  }
+  stopBlockDropInterval();
+  const stats = getArcadeStats();
+  if (state.blockDrop.score > stats.blockDropBest) void saveArcadeStats({ blockDropBest: state.blockDrop.score });
+  if (state.phoneOpen && state.app === 'arcade' && state.arcadeGame === 'blockdrop' && !state.call) updateBlockDropBoard();
+}
+
+function stopBlockDropInterval() {
+  if (state.blockDrop?.interval) {
+    window.clearInterval(state.blockDrop.interval);
+    state.blockDrop.interval = null;
+  }
+}
+
+function blockDropStep() {
+  if (!state.blockDrop.running || state.call || state.blockDrop.gameOver) return;
+  if (!moveBlockDrop(0, 1, false)) lockBlockDropPiece();
+}
+
+function moveBlockDrop(dx, dy, redraw = true) {
+  if (state.blockDrop.gameOver || state.blockDrop.paused) return false;
+  if (!state.blockDrop.running) startBlockDropGame();
+  const piece = state.blockDrop.current;
+  if (!piece || blockDropCollides(piece, dx, dy, piece.cells)) return false;
+  piece.x += dx;
+  piece.y += dy;
+  if (redraw) updateBlockDropBoard();
+  return true;
+}
+
+function softDropBlockDrop() {
+  if (state.blockDrop.gameOver) return;
+  if (!state.blockDrop.running && !state.blockDrop.paused) startBlockDropGame();
+  if (state.blockDrop.paused) return;
+  if (moveBlockDrop(0, 1, false)) state.blockDrop.score += 1;
+  else lockBlockDropPiece();
+  updateBlockDropBoard();
+}
+
+function hardDropBlockDrop() {
+  if (state.blockDrop.gameOver) {
+    resetBlockDropGame();
+    startBlockDropGame();
+    return;
+  }
+  if (!state.blockDrop.running && !state.blockDrop.paused) startBlockDropGame();
+  if (state.blockDrop.paused) return;
+  let distance = 0;
+  while (moveBlockDrop(0, 1, false)) distance += 1;
+  state.blockDrop.score += distance * 2;
+  lockBlockDropPiece();
+  updateBlockDropBoard();
+}
+
+function rotateBlockDrop() {
+  if (state.blockDrop.gameOver || state.blockDrop.paused) return;
+  if (!state.blockDrop.running) startBlockDropGame();
+  const piece = state.blockDrop.current;
+  if (!piece) return;
+  const rotated = rotatedBlockDropCells(piece.cells);
+  for (const kick of [0, -1, 1, -2, 2]) {
+    if (!blockDropCollides(piece, kick, 0, rotated)) {
+      piece.x += kick;
+      piece.cells = rotated;
+      updateBlockDropBoard();
+      return;
+    }
+  }
+}
+
+function lockBlockDropPiece() {
+  const piece = state.blockDrop.current;
+  if (!piece) return;
+  for (const [cx, cy] of piece.cells) {
+    const x = piece.x + cx;
+    const y = piece.y + cy;
+    if (y < 0) {
+      finishBlockDropGame();
+      return;
+    }
+    if (state.blockDrop.board[y]) state.blockDrop.board[y][x] = piece.type;
+  }
+  state.blockDrop.score += 10;
+  const cleared = clearBlockDropLines();
+  if (cleared) {
+    const bonuses = [0, 100, 300, 500, 800];
+    state.blockDrop.lines += cleared;
+    state.blockDrop.score += bonuses[cleared] || cleared * 250;
+  }
+  spawnBlockDropPiece();
+  if (!state.blockDrop.gameOver) restartBlockDropInterval();
+  updateBlockDropBoard();
+}
+
+function clearBlockDropLines() {
+  const remaining = state.blockDrop.board.filter((row) => !row.every(Boolean));
+  const cleared = BLOCK_DROP_HEIGHT - remaining.length;
+  while (remaining.length < BLOCK_DROP_HEIGHT) remaining.unshift(Array(BLOCK_DROP_WIDTH).fill(0));
+  state.blockDrop.board = remaining;
+  return cleared;
+}
+
+function finishBlockDropGame() {
+  state.blockDrop.running = false;
+  state.blockDrop.paused = false;
+  state.blockDrop.gameOver = true;
+  stopBlockDropInterval();
+  const stats = getArcadeStats();
+  if (state.blockDrop.score > stats.blockDropBest) void saveArcadeStats({ blockDropBest: state.blockDrop.score });
+  updateBlockDropBoard();
+}
+
+function renderBlockDropGame(container) {
+  if (!state.blockDrop.board.length) resetBlockDropGame();
+  const stats = getArcadeStats();
+  const shell = document.createElement('div');
+  shell.className = 'fc-blockdrop-shell';
+  shell.innerHTML = `
+    <div class="fc-arcade-scorebar"><span>Score <strong class="fc-blockdrop-score">${state.blockDrop.score}</strong></span><span>Lines <strong class="fc-blockdrop-lines">${state.blockDrop.lines}</strong></span><span>Best <strong class="fc-blockdrop-best">${Math.max(stats.blockDropBest, state.blockDrop.score)}</strong></span></div>
+    <div class="fc-blockdrop-board" role="img" aria-label="Falling block puzzle board"></div>
+    <div class="fc-blockdrop-status"></div>
+    <div class="fc-blockdrop-controls">
+      <button type="button" data-block-action="rotate" aria-label="Rotate"><i class="fa-solid fa-rotate-right"></i></button>
+      <button type="button" data-block-action="left" aria-label="Move left"><i class="fa-solid fa-chevron-left"></i></button>
+      <button type="button" data-block-action="down" aria-label="Move down"><i class="fa-solid fa-chevron-down"></i></button>
+      <button type="button" data-block-action="right" aria-label="Move right"><i class="fa-solid fa-chevron-right"></i></button>
+      <button type="button" data-block-action="drop" aria-label="Hard drop"><i class="fa-solid fa-angles-down"></i></button>
+    </div>
+    <div class="fc-blockdrop-actions">
+      <button type="button" class="fc-arcade-primary fc-blockdrop-start"><i class="fa-solid fa-play"></i> Start</button>
+      <button type="button" class="fc-arcade-secondary fc-blockdrop-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+    </div>
+  `;
+  container.appendChild(shell);
+  const board = shell.querySelector('.fc-blockdrop-board');
+  for (let i = 0; i < BLOCK_DROP_WIDTH * BLOCK_DROP_HEIGHT; i++) {
+    const cell = document.createElement('span');
+    cell.className = 'fc-blockdrop-cell';
+    board.appendChild(cell);
+  }
+  shell.querySelectorAll('[data-block-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = button.dataset.blockAction;
+      if (action === 'left') moveBlockDrop(-1, 0);
+      else if (action === 'right') moveBlockDrop(1, 0);
+      else if (action === 'down') softDropBlockDrop();
+      else if (action === 'rotate') rotateBlockDrop();
+      else if (action === 'drop') hardDropBlockDrop();
+    });
+  });
+  shell.querySelector('.fc-blockdrop-start').addEventListener('click', () => {
+    if (state.blockDrop.gameOver) { resetBlockDropGame(); startBlockDropGame(); }
+    else if (state.blockDrop.running) pauseBlockDropGame();
+    else startBlockDropGame();
+  });
+  shell.querySelector('.fc-blockdrop-new').addEventListener('click', () => { resetBlockDropGame(); updateBlockDropBoard(); });
+  updateBlockDropBoard();
+}
+
+function updateBlockDropBoard() {
+  const boardEl = state.root?.querySelector('.fc-blockdrop-board');
+  if (!boardEl) return;
+  const display = state.blockDrop.board.map((row) => [...row]);
+  const piece = state.blockDrop.current;
+  if (piece && !state.blockDrop.gameOver) {
+    for (const [cx, cy] of piece.cells) {
+      const x = piece.x + cx;
+      const y = piece.y + cy;
+      if (y >= 0 && y < BLOCK_DROP_HEIGHT && x >= 0 && x < BLOCK_DROP_WIDTH) display[y][x] = piece.type;
+    }
+  }
+  [...boardEl.children].forEach((cell, index) => {
+    const y = Math.floor(index / BLOCK_DROP_WIDTH);
+    const x = index % BLOCK_DROP_WIDTH;
+    const value = display[y]?.[x] || 0;
+    cell.className = `fc-blockdrop-cell${value ? ` piece-${value}` : ''}`;
+  });
+  const score = state.root?.querySelector('.fc-blockdrop-score');
+  const lines = state.root?.querySelector('.fc-blockdrop-lines');
+  const best = state.root?.querySelector('.fc-blockdrop-best');
+  if (score) score.textContent = String(state.blockDrop.score);
+  if (lines) lines.textContent = String(state.blockDrop.lines);
+  if (best) best.textContent = String(Math.max(getArcadeStats().blockDropBest, state.blockDrop.score));
+  const status = state.root?.querySelector('.fc-blockdrop-status');
+  if (status) {
+    if (state.blockDrop.gameOver) status.textContent = `Game over — score ${state.blockDrop.score}.`;
+    else if (state.blockDrop.paused) status.textContent = 'Paused.';
+    else if (!state.blockDrop.running) status.textContent = 'Use the controls or arrow keys. Space performs a hard drop.';
+    else status.textContent = 'Clear complete rows before the stack reaches the top.';
+  }
+  const start = state.root?.querySelector('.fc-blockdrop-start');
+  if (start) {
+    if (state.blockDrop.gameOver) start.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Play Again';
+    else if (state.blockDrop.running) start.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+    else start.innerHTML = '<i class="fa-solid fa-play"></i> Resume';
+  }
+}
+
+// ---------------------------
+// Music app
+// ---------------------------
+
+function getFoundryPlayingTracks() {
+  const tracks = [];
+  for (const playlist of game.playlists?.contents || []) {
+    const sounds = playlist.sounds?.contents || Array.from(playlist.sounds || []);
+    for (const sound of sounds) {
+      if (!sound?.playing) continue;
+      tracks.push({ playlist, sound });
+    }
+  }
+  return tracks;
+}
+
+function getPlaylistVolume() {
+  const raw = Number(game.settings.get('core', 'globalPlaylistVolume'));
+  return Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 1;
+}
+
+function setPlaylistVolume(value) {
+  const volume = Math.max(0, Math.min(1, Number(value) || 0));
+  if (volume > 0.01) state.musicLastVolume = volume;
+  if (state.musicVolumeTimer) window.clearTimeout(state.musicVolumeTimer);
+  state.musicVolumeTimer = window.setTimeout(async () => {
+    try {
+      await game.settings.set('core', 'globalPlaylistVolume', volume);
+    } catch (error) {
+      console.warn(`${MODULE_ID} | Could not change playlist volume`, error);
+      ui.notifications.warn('Foundry music volume could not be changed.');
+    }
+  }, 45);
+}
+
+function renderMusicView() {
+  const container = state.root.querySelector('.fc-music-content');
+  if (!container) return;
+  container.replaceChildren();
+  const tracks = getFoundryPlayingTracks();
+  const primary = tracks[0] || null;
+  const volume = getPlaylistVolume();
+  if (volume > 0.01) state.musicLastVolume = volume;
+
+  const shell = document.createElement('div');
+  shell.className = 'fc-music-shell';
+  shell.innerHTML = `
+    <div class="fc-music-brand"><span><i class="fa-solid fa-wave-square"></i></span><div><strong>Music</strong><small>Foundry streaming</small></div></div>
+    <div class="fc-music-now${primary ? ' is-playing' : ''}">
+      <div class="fc-music-art"><i class="fa-solid ${primary ? 'fa-music' : 'fa-headphones'}"></i><span class="fc-music-eq" aria-hidden="true"><b></b><b></b><b></b><b></b></span></div>
+      <div class="fc-music-kicker">${primary ? 'NOW PLAYING' : 'READY'}</div>
+      <div class="fc-music-track">${escapeMissionText(primary?.sound?.name || 'Nothing playing')}</div>
+      <div class="fc-music-playlist">${escapeMissionText(primary?.playlist?.name || 'Waiting for the GM to start a Foundry playlist')}</div>
+    </div>
+    <div class="fc-music-volume-card">
+      <div class="fc-music-volume-head"><span>Your Music Volume</span><strong class="fc-music-volume-value">${Math.round(volume * 100)}%</strong></div>
+      <div class="fc-music-volume-row">
+        <button type="button" class="fc-music-mute" aria-label="Mute or restore music"><i class="fa-solid ${volume <= 0.01 ? 'fa-volume-xmark' : 'fa-volume-high'}"></i></button>
+        <input class="fc-music-volume" type="range" min="0" max="100" step="1" value="${Math.round(volume * 100)}" aria-label="Personal Foundry playlist volume">
+      </div>
+      <small>This only changes playlist volume for you. The GM still controls playback.</small>
+    </div>
+  `;
+  container.appendChild(shell);
+
+  if (tracks.length > 1) {
+    const section = document.createElement('div');
+    section.className = 'fc-music-also';
+    const heading = document.createElement('div');
+    heading.className = 'fc-music-section-title';
+    heading.textContent = 'Also playing';
+    section.appendChild(heading);
+    for (const { playlist, sound } of tracks.slice(1, 5)) {
+      const row = document.createElement('div');
+      row.className = 'fc-music-track-row';
+      row.innerHTML = `<span><i class="fa-solid fa-music"></i></span><div><strong>${escapeMissionText(sound.name || 'Track')}</strong><small>${escapeMissionText(playlist.name || 'Playlist')}</small></div>`;
+      section.appendChild(row);
+    }
+    container.appendChild(section);
+  }
+
+  const slider = shell.querySelector('.fc-music-volume');
+  const label = shell.querySelector('.fc-music-volume-value');
+  const mute = shell.querySelector('.fc-music-mute');
+  slider.addEventListener('input', () => {
+    const next = Math.max(0, Math.min(100, Number(slider.value) || 0));
+    label.textContent = `${Math.round(next)}%`;
+    mute.querySelector('i').className = `fa-solid ${next <= 1 ? 'fa-volume-xmark' : 'fa-volume-high'}`;
+    setPlaylistVolume(next / 100);
+  });
+  slider.addEventListener('change', async () => {
+    const next = Math.max(0, Math.min(100, Number(slider.value) || 0));
+    if (state.musicVolumeTimer) window.clearTimeout(state.musicVolumeTimer);
+    state.musicVolumeTimer = null;
+    try { await game.settings.set('core', 'globalPlaylistVolume', next / 100); }
+    catch (error) { console.warn(`${MODULE_ID} | Could not change playlist volume`, error); }
+  });
+  mute.addEventListener('click', async () => {
+    const current = getPlaylistVolume();
+    const next = current > 0.01 ? 0 : Math.max(0.05, state.musicLastVolume || 0.7);
+    if (current > 0.01) state.musicLastVolume = current;
+    try {
+      await game.settings.set('core', 'globalPlaylistVolume', next);
+      renderMusicView();
+    } catch (error) {
+      console.warn(`${MODULE_ID} | Could not change playlist volume`, error);
+    }
+  });
 }
 
 // ---------------------------

@@ -3386,6 +3386,7 @@
 .fc-arcade-game-icon-mines { background: linear-gradient(145deg, #555d69, #242a31); }
 .fc-arcade-game-icon-runner { background: linear-gradient(145deg, #e39a37, #9d5c16); }
 .fc-arcade-game-icon-guess { background: linear-gradient(145deg, #9a62df, #5b3298); }
+.fc-arcade-game-icon-stack { background: linear-gradient(145deg, #35b9c7, #227487); }
 
 .fc-mines-shell,
 .fc-runner-shell,
@@ -4324,9 +4325,7 @@
 }
 
 .fc-app-icon-mondo {
-  grid-column: 1 / -1;
-  justify-self: center;
-  min-width: 92px;
+  min-width: 0;
 }
 
 .fc-mondo-view[hidden] {
@@ -4669,3 +4668,301 @@
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+
+
+/* v2.1.0 Stack It */
+.fc-stack-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.fc-stack-board {
+  position: relative;
+  width: min(100%, 252px);
+  height: 190px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(34,82,104,.38), rgba(10,18,27,.88));
+  box-shadow: inset 0 0 22px rgba(0,0,0,.22);
+  cursor: pointer;
+}
+
+.fc-stack-layers {
+  position: absolute;
+  inset: 0 7px 0;
+}
+
+.fc-stack-horizon {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.14);
+}
+
+.fc-stack-block {
+  position: absolute;
+  height: 13px;
+  border-radius: 3px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 2px 4px rgba(0,0,0,.18);
+}
+
+.fc-stack-block.is-placed {
+  background: linear-gradient(180deg, #5bc5d3, #318797);
+}
+
+.fc-stack-block.is-moving {
+  background: linear-gradient(180deg, #ffd078, #d99a35);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 0 9px rgba(255,196,91,.22);
+}
+
+.fc-stack-status {
+  min-height: 24px;
+  display: grid;
+  place-items: center;
+  color: rgba(255,255,255,.66);
+  text-align: center;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.fc-stack-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.fc-stack-place {
+  grid-column: 1 / -1;
+}
+
+.fc-stack-pause:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+
+/* v2.2.0 Block Drop + Music */
+.fc-app-symbol-music {
+  background: linear-gradient(145deg, #6f38c5, #2d185e);
+  border: 1px solid rgba(190,156,255,.28);
+}
+
+.fc-music-view[hidden] { display: none !important; }
+.fc-music-view {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 10px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.18) transparent;
+}
+.fc-music-content,
+.fc-music-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fc-music-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 2px 0;
+}
+.fc-music-brand > span {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(166,115,255,.15);
+  color: #c9a9ff;
+}
+.fc-music-brand > div { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.fc-music-brand strong { color: #fff; font-size: 12px; }
+.fc-music-brand small { color: rgba(255,255,255,.46); font-size: 8px; text-transform: uppercase; letter-spacing: .1em; }
+
+.fc-music-now {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 13px 12px 15px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 15px;
+  background: linear-gradient(180deg, rgba(120,70,195,.18), rgba(17,19,28,.70));
+  text-align: center;
+}
+.fc-music-art {
+  position: relative;
+  width: 116px;
+  height: 116px;
+  margin-bottom: 4px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 32% 25%, rgba(255,255,255,.18), transparent 24%),
+    linear-gradient(145deg, #8f54d7, #313a79 55%, #131725);
+  box-shadow: 0 11px 24px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.16);
+  color: #fff;
+  font-size: 33px;
+}
+.fc-music-now:not(.is-playing) .fc-music-art { opacity: .72; }
+.fc-music-eq {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  height: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 3px;
+}
+.fc-music-eq b {
+  width: 3px;
+  border-radius: 3px;
+  background: rgba(255,255,255,.72);
+  animation: fc-music-eq 1.05s ease-in-out infinite alternate;
+}
+.fc-music-eq b:nth-child(1) { height: 7px; }
+.fc-music-eq b:nth-child(2) { height: 14px; animation-delay: -.4s; }
+.fc-music-eq b:nth-child(3) { height: 10px; animation-delay: -.7s; }
+.fc-music-eq b:nth-child(4) { height: 16px; animation-delay: -.2s; }
+.fc-music-now:not(.is-playing) .fc-music-eq b { animation: none; height: 4px; opacity: .45; }
+@keyframes fc-music-eq { from { transform: scaleY(.45); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .fc-music-eq b { animation: none !important; } }
+.fc-music-kicker { color: #bfa2ef; font-size: 8px; font-weight: 900; letter-spacing: .14em; }
+.fc-music-track {
+  max-width: 235px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+}
+.fc-music-playlist {
+  max-width: 235px;
+  color: rgba(255,255,255,.53);
+  font-size: 9px;
+  line-height: 1.35;
+}
+.fc-music-volume-card {
+  padding: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 13px;
+  background: rgba(255,255,255,.045);
+}
+.fc-music-volume-head { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; font-weight: 800; color: rgba(255,255,255,.72); }
+.fc-music-volume-head strong { color: #fff; }
+.fc-music-volume-row { display: grid; grid-template-columns: 34px minmax(0,1fr); align-items: center; gap: 8px; }
+.fc-music-mute {
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(164,106,246,.17);
+  color: #d4bbff;
+  box-shadow: none;
+  cursor: pointer;
+}
+.fc-music-volume {
+  width: 100%;
+  margin: 0;
+  accent-color: #ad7cff;
+}
+.fc-music-volume-card > small { color: rgba(255,255,255,.42); font-size: 8px; line-height: 1.35; }
+.fc-music-section-title { margin: 2px 1px 0; color: rgba(255,255,255,.48); font-size: 8px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.fc-music-also { display: flex; flex-direction: column; gap: 6px; }
+.fc-music-track-row {
+  min-width: 0;
+  padding: 7px 9px;
+  display: grid;
+  grid-template-columns: 28px minmax(0,1fr);
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+.fc-music-track-row > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: rgba(164,106,246,.13); color: #c6a6f7; }
+.fc-music-track-row > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fc-music-track-row strong, .fc-music-track-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-music-track-row strong { color: #fff; font-size: 10px; }
+.fc-music-track-row small { color: rgba(255,255,255,.42); font-size: 8px; }
+
+.fc-arcade-game-icon-blockdrop { background: linear-gradient(145deg, #cf5ea8, #753a9d); }
+.fc-blockdrop-shell { display: flex; flex-direction: column; gap: 8px; }
+.fc-blockdrop-board {
+  width: min(100%, 210px);
+  aspect-ratio: 1 / 2;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(20, 1fr);
+  gap: 1px;
+  padding: 4px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 9px;
+  background: rgba(2,4,9,.72);
+  box-shadow: inset 0 0 20px rgba(0,0,0,.35);
+}
+.fc-blockdrop-cell {
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px;
+  background: rgba(255,255,255,.025);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.018);
+}
+.fc-blockdrop-cell.piece-1 { background: #48c8d8; }
+.fc-blockdrop-cell.piece-2 { background: #edc34d; }
+.fc-blockdrop-cell.piece-3 { background: #a66de0; }
+.fc-blockdrop-cell.piece-4 { background: #63c878; }
+.fc-blockdrop-cell.piece-5 { background: #dd5d69; }
+.fc-blockdrop-cell.piece-6 { background: #5e7ee0; }
+.fc-blockdrop-cell.piece-7 { background: #e38a4d; }
+.fc-blockdrop-cell[class*="piece-"] { box-shadow: inset 1px 1px 0 rgba(255,255,255,.24), inset -1px -1px 0 rgba(0,0,0,.18); }
+.fc-blockdrop-status {
+  min-height: 23px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: rgba(255,255,255,.62);
+  font-size: 8px;
+  line-height: 1.35;
+}
+.fc-blockdrop-controls {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+.fc-blockdrop-controls button {
+  min-width: 0;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  background: rgba(255,255,255,.07);
+  color: #fff;
+  box-shadow: none;
+  cursor: pointer;
+}
+.fc-blockdrop-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }

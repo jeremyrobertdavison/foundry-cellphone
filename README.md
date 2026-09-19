@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **2.0.0** adds **Mondo Rides**, a ride-share-inspired app that lets players independently travel between Foundry Scenes the GM has made available for downtime exploration. The GM can enable or disable destinations at any time without activating those Scenes for the whole table.
+Version **2.2.0** adds a **Music** app that mirrors Foundry playlist playback with a personal volume control, plus **Block Drop**, a new falling-block Arcade game.
 
 ## Cellphone apps
 
@@ -12,13 +12,14 @@ Version **2.0.0** adds **Mondo Rides**, a ride-share-inspired app that lets play
 - **Browser** — GM-configured external website shortcuts plus permission-aware Foundry Journal search inside the phone.
 - **Notes** — private per-user notes with title/body editing and deletion.
 - **News** — GM-authored headline feed with blurb, publisher, author, and publication date/time.
-- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, and Guess My Number.
+- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, Guess My Number, Stack It, and Block Drop.
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
 - **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
+- **Music** — streaming-style now-playing view for Foundry playlists with a client-only personal music-volume slider.
 
 ## Mondo Rides
 
-Mondo Rides turns GM-approved Foundry Scenes into player-selectable downtime destinations. The app is styled like a generic ride-share service and shows the user's current Scene plus every destination currently enabled by the GM.
+Mondo Rides turns GM-approved Foundry Scenes into player-selectable downtime destinations. The app is styled like a generic ride-share service and shows every destination currently enabled by the GM.
 
 GMs receive **Manage Destinations**, which lists the world's Scenes with simple on/off switches. Enabling a Scene immediately adds it to Mondo Rides; disabling it immediately removes it from player phones. No Mondo-specific copy of the Scene is created.
 
@@ -30,7 +31,7 @@ The app uses Scene thumbnails/background artwork when available and never moves 
 
 ## Maps
 
-Open the cellphone and choose **Maps**. Players see only maps available to their Foundry user. Use the previous/next controls to cycle through available maps and **Enlarge** to inspect a larger scrollable version inside the phone.
+Open the cellphone and choose **Maps**. Players see only maps available to their Foundry user. Use the previous/next controls to cycle through available maps and **Open Large** to inspect the map in a larger dedicated overlay window over Foundry.
 
 ### GM map management
 
@@ -73,15 +74,23 @@ The News app is a read-only feed for players. GMs can publish, edit, and delete 
 
 ## Arcade
 
-The Arcade includes five lightweight single-player games:
+The Arcade includes seven lightweight single-player games:
 
 - **Snake** — keyboard/WASD and on-screen controls, pause/resume, local best score.
 - **Tic Tac Toe** — play against a simple phone AI with local win/loss/draw stats.
 - **Minesweeper** — 8×8 board, 10 mines, first-click safety, Flag Mode/right-click flagging.
 - **Runner** — generic endless jump-and-dodge game with keyboard/tap controls and local best distance.
 - **Guess My Number** — guess a number from 1–100 with Too high / Too low feedback.
+- **Stack It** — time moving blocks to build the tallest tower possible; overhang is trimmed and a complete miss ends the run. Supports tap/click, Space/Enter, pause/resume, and a local best score.
+- **Block Drop** — a classic falling-block puzzle with seven block shapes, row clearing, increasing speed, keyboard/on-screen controls, hard drop, pause/resume, and local best score.
 
-Snake and Runner automatically pause when appropriate, including when leaving Arcade or closing the phone.
+Snake, Runner, Stack It, and Block Drop automatically pause when appropriate, including when leaving Arcade or closing the phone.
+
+## Music
+
+The Music app provides a generic streaming-player presentation for Foundry's native Playlist system. It shows the currently playing track and playlist, displays additional simultaneously playing tracks when present, and updates when Foundry playlist playback changes.
+
+The **Your Music Volume** slider controls Foundry's client-side global Playlist volume setting. It changes only the current player's local playlist volume and does not change the GM's track volume or another user's listening level. A mute/restore button is also provided. Playback remains under normal Foundry/GM control; the app does not add player skip, pause, or track-selection permissions.
 
 ## Foundry compatibility
 
@@ -108,7 +117,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v2.0.0.zip
+foundry-cellphone-v2.2.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md
