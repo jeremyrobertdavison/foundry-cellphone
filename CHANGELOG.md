@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.4.0
+
+- Added a personal **Environment Volume** control to the Music app using Foundry's client-side Ambient volume setting.
+- Added mute/restore support for environment/ambient Scene sounds alongside the existing personal Music volume control.
+- Added message deletion controls directly inside cellphone conversations.
+- Players can delete messages they authored; GMs can delete any cellphone message visible to them.
+- Message deletion works in Party Chat, custom group chats, player DMs, and NPC conversations where the message is visible to the current user.
+- Deleting a cellphone message removes that message from the conversation for all participants.
+- Added Like and Dislike reactions to individual Friendpage comments.
+- Comment reactions are tracked per active Friendpage identity, including GM-controlled NPC profiles.
+- Existing messages, Friendpage posts/comments, and Music playback data require no migration.
+
 ## 2.3.0
 
 - Added **Chess** as the eighth Arcade game.

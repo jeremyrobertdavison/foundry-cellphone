@@ -2,20 +2,24 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **2.3.0** expands the **Arcade** with **Chess** and **Farkle**, bringing the phone to nine built-in downtime games.
+Version **2.4.0** expands day-to-day phone controls with message deletion, Friendpage comment reactions, and personal Music + Environment volume controls.
 
 ## Cellphone apps
 
-- **Messages** — Party Chat, custom groups, player DMs, NPC texting, typing indicators, player calls, and GM calls as NPCs.
+- **Messages** — Party Chat, custom groups, player DMs, NPC texting, typing indicators, calls, and in-phone message deletion/moderation.
 - **Mission Log** — GM-managed assignments and briefings with all-player or selected-player visibility.
-- **Friendpage** — in-world social media with user/NPC profiles, walls, posts, comments, Likes, and Dislikes.
+- **Friendpage** — in-world social media with user/NPC profiles, walls, posts, comments, plus Like/Dislike reactions on posts and comments.
 - **Browser** — GM-configured external website shortcuts plus permission-aware Foundry Journal search inside the phone.
 - **Notes** — private per-user notes with title/body editing and deletion.
 - **News** — GM-authored headline feed with blurb, publisher, author, and publication date/time.
 - **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, Guess My Number, Stack It, Block Drop, Chess, and Farkle.
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
 - **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
-- **Music** — streaming-style now-playing view for Foundry playlists with a client-only personal music-volume slider.
+- **Music** — streaming-style now-playing view with client-only personal Music and Environment volume controls.
+
+## Messages
+
+Cellphone messages can be deleted directly from their message bubble. Players may delete messages they authored; GMs may delete any cellphone message visible to them. Deletion removes the underlying cellphone message record, so the message disappears for everyone in that conversation rather than only being hidden locally. Existing privacy rules are unchanged: a GM does not gain access to player-to-player conversations that were not already visible to that GM.
 
 ## Mondo Rides
 
@@ -62,7 +66,7 @@ The search field searches Foundry Journal text pages the current user has permis
 
 Friendpage provides a public in-world social feed. GMs can enable Foundry user profiles and unassigned NPC Actor profiles. Players post as their own active profile; GMs receive a **Posting as** selector for enabled NPC identities.
 
-Posts support comments, Likes, Dislikes, profile navigation, and posts on another profile's wall. Reactions are tracked per Friendpage profile, allowing multiple NPC identities controlled by the same GM to react independently.
+Posts support comments, Likes, Dislikes, profile navigation, and posts on another profile's wall. Individual comments also support Like and Dislike reactions. Reactions are tracked per Friendpage profile, allowing multiple NPC identities controlled by the same GM to react independently.
 
 ## Notes
 
@@ -92,7 +96,7 @@ Snake, Runner, Stack It, and Block Drop automatically pause when appropriate, in
 
 The Music app provides a generic streaming-player presentation for Foundry's native Playlist system. It shows the currently playing track and playlist, displays additional simultaneously playing tracks when present, and updates when Foundry playlist playback changes.
 
-The **Your Music Volume** slider controls Foundry's client-side global Playlist volume setting. It changes only the current player's local playlist volume and does not change the GM's track volume or another user's listening level. A mute/restore button is also provided. Playback remains under normal Foundry/GM control; the app does not add player skip, pause, or track-selection permissions.
+The **Your Music Volume** slider controls Foundry's client-side global Playlist volume setting. The **Your Environment Volume** slider controls Foundry's client-side Ambient volume setting for Scene environmental sounds. Both controls affect only the current user's listening level and include mute/restore buttons. Playback remains under normal Foundry/GM control; the app does not add player skip, pause, or track-selection permissions.
 
 ## Foundry compatibility
 
@@ -119,7 +123,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v2.3.0.zip
+foundry-cellphone-v2.4.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

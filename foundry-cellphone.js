@@ -89,6 +89,8 @@ const state = {
   farkle: { playerScore: 0, phoneScore: 0, turnScore: 0, diceCount: 6, dice: [], selected: new Set(), status: "player", message: "Roll the dice to start.", rolled: false, phoneTimer: null },
   musicLastVolume: 0.7,
   musicVolumeTimer: null,
+  musicLastAmbientVolume: 0.7,
+  musicAmbientVolumeTimer: null,
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -1536,13 +1538,51 @@ function buildMessageBubble(message) {
   body.textContent = data.body ?? message.content ?? "";
   bubble.appendChild(body);
 
-  const time = document.createElement("div");
+  const footer = document.createElement("div");
+  footer.className = "fc-bubble-footer";
+
+  const time = document.createElement("span");
   time.className = "fc-bubble-time";
   time.textContent = formatMessageTime(data.sentAt ?? message.timestamp);
-  bubble.appendChild(time);
+  footer.appendChild(time);
 
+  if (canDeletePhoneMessage(message, data)) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "fc-bubble-delete";
+    remove.title = game.user.isGM && data.authorUserId !== game.user.id ? "Delete message as GM" : "Delete your message";
+    remove.setAttribute("aria-label", "Delete message");
+    remove.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+    remove.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await deletePhoneMessage(message, data);
+    });
+    footer.appendChild(remove);
+  }
+
+  bubble.appendChild(footer);
   row.appendChild(bubble);
   return row;
+}
+
+function canDeletePhoneMessage(message, data = normalizePhoneData(message)) {
+  if (!message || !data || data.event === "group-create") return false;
+  if (game.user?.isGM) return true;
+  if (data.authorUserId) return data.authorUserId === game.user?.id;
+  return data.senderType === "user" && data.senderId === game.user?.id;
+}
+
+async function deletePhoneMessage(message, data = normalizePhoneData(message)) {
+  if (!canDeletePhoneMessage(message, data)) return;
+  const confirmed = window.confirm("Delete this message for everyone in this conversation?");
+  if (!confirmed) return;
+  try {
+    await message.delete();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to delete cellphone message`, error);
+    ui.notifications.error("The cellphone message could not be deleted.");
+  }
 }
 
 function isOutgoingForCurrentView(data) {
@@ -2496,6 +2536,26 @@ function getFriendpageReactionState(postId) {
   return { likes, dislikes, mine: actingKey ? (latestByProfile.get(actingKey)?.reaction || 'none') : 'none' };
 }
 
+function getFriendpageCommentReactionState(commentId) {
+  const latestByProfile = new Map();
+  for (const record of getFriendpageRecords()) {
+    const data = record.data;
+    if (data.type !== 'comment-reaction' || data.commentId !== commentId) continue;
+    const authorKey = getFriendpageIdentityKey(data, 'author');
+    if (!authorKey || !isFriendpageProfileActive(authorKey)) continue;
+    const current = latestByProfile.get(authorKey);
+    if (!current || Number(data.createdAt || 0) >= Number(current.createdAt || 0)) latestByProfile.set(authorKey, data);
+  }
+  let likes = 0;
+  let dislikes = 0;
+  for (const data of latestByProfile.values()) {
+    if (data.reaction === 'like') likes += 1;
+    if (data.reaction === 'dislike') dislikes += 1;
+  }
+  const actingKey = getFriendpageActingIdentity()?.key || null;
+  return { likes, dislikes, mine: actingKey ? (latestByProfile.get(actingKey)?.reaction || 'none') : 'none' };
+}
+
 function getFriendpageAllowedActingProfiles() {
   const activeKeys = getActiveFriendpageProfileKeySet();
   if (!game.user?.isGM) {
@@ -2934,11 +2994,17 @@ function renderFriendpagePost(container, record) {
     for (const comment of comments) {
       const commentAuthor = getFriendpageProfileFromRecord(comment.data, 'author');
       if (!commentAuthor) continue;
+      const commentId = comment.data.id || comment.document.id;
+      const commentReaction = getFriendpageCommentReactionState(commentId);
+
       const row = document.createElement('div');
       row.className = 'fc-friend-comment';
       const img = document.createElement('img');
       img.src = commentAuthor.avatar;
       img.alt = '';
+
+      const content = document.createElement('div');
+      content.className = 'fc-friend-comment-content';
       const bubble = document.createElement('div');
       bubble.className = 'fc-friend-comment-bubble';
       const who = document.createElement('button');
@@ -2949,7 +3015,16 @@ function renderFriendpagePost(container, record) {
       const text = document.createElement('span');
       text.textContent = comment.data.body || '';
       bubble.append(who, text);
-      row.append(img, bubble);
+
+      const commentActions = document.createElement('div');
+      commentActions.className = 'fc-friend-comment-actions';
+      commentActions.append(
+        buildFriendCommentReactionButton('like', commentReaction.likes, commentReaction.mine === 'like', data.id, commentId, canInteract),
+        buildFriendCommentReactionButton('dislike', commentReaction.dislikes, commentReaction.mine === 'dislike', data.id, commentId, canInteract)
+      );
+
+      content.append(bubble, commentActions);
+      row.append(img, content);
       commentList.appendChild(row);
     }
     card.appendChild(commentList);
@@ -3001,6 +3076,28 @@ function buildFriendReactionButton(kind, count, active, postId, enabled = true) 
     button.disabled = true;
     try {
       await createFriendpageReaction(postId, active ? 'none' : kind);
+      renderPhone();
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
+function buildFriendCommentReactionButton(kind, count, active, postId, commentId, enabled = true) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `fc-friend-comment-reaction${active ? ' is-active' : ''}`;
+  button.innerHTML = kind === 'like'
+    ? `<i class="fa-solid fa-thumbs-up"></i><span>${count}</span>`
+    : `<i class="fa-solid fa-thumbs-down"></i><span>${count}</span>`;
+  button.title = enabled ? (kind === 'like' ? 'Like comment' : 'Dislike comment') : 'No active Friendpage identity';
+  button.disabled = !enabled;
+  button.addEventListener('click', async () => {
+    if (!enabled) return;
+    button.disabled = true;
+    try {
+      await createFriendpageCommentReaction(postId, commentId, active ? 'none' : kind);
       renderPhone();
     } finally {
       button.disabled = false;
@@ -3076,6 +3173,23 @@ async function createFriendpageReaction(postId, reaction) {
     createdAt: Date.now()
   };
   return createFriendpageDocument(data, `[Friendpage] ${author.name} reaction`, author);
+}
+
+async function createFriendpageCommentReaction(postId, commentId, reaction) {
+  const author = getFriendpageActingIdentity();
+  if (!author) throw new Error('No active Friendpage identity.');
+  const data = {
+    schema: 3,
+    type: 'comment-reaction',
+    id: makeId(),
+    postId,
+    commentId,
+    ...buildFriendpageIdentityFields(author, 'author'),
+    operatorUserId: game.user.id,
+    reaction,
+    createdAt: Date.now()
+  };
+  return createFriendpageDocument(data, `[Friendpage] ${author.name} comment reaction`, author);
 }
 
 function createFriendpageDocument(data, content, authorProfile = null) {
@@ -8035,6 +8149,25 @@ function setPlaylistVolume(value) {
   }, 45);
 }
 
+function getAmbientVolume() {
+  const raw = Number(game.settings.get('core', 'globalAmbientVolume'));
+  return Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 1;
+}
+
+function setAmbientVolume(value) {
+  const volume = Math.max(0, Math.min(1, Number(value) || 0));
+  if (volume > 0.01) state.musicLastAmbientVolume = volume;
+  if (state.musicAmbientVolumeTimer) window.clearTimeout(state.musicAmbientVolumeTimer);
+  state.musicAmbientVolumeTimer = window.setTimeout(async () => {
+    try {
+      await game.settings.set('core', 'globalAmbientVolume', volume);
+    } catch (error) {
+      console.warn(`${MODULE_ID} | Could not change ambient volume`, error);
+      ui.notifications.warn('Foundry environment volume could not be changed.');
+    }
+  }, 45);
+}
+
 function renderMusicView() {
   const container = state.root.querySelector('.fc-music-content');
   if (!container) return;
@@ -8042,7 +8175,9 @@ function renderMusicView() {
   const tracks = getFoundryPlayingTracks();
   const primary = tracks[0] || null;
   const volume = getPlaylistVolume();
+  const ambientVolume = getAmbientVolume();
   if (volume > 0.01) state.musicLastVolume = volume;
+  if (ambientVolume > 0.01) state.musicLastAmbientVolume = ambientVolume;
 
   const shell = document.createElement('div');
   shell.className = 'fc-music-shell';
@@ -8061,6 +8196,14 @@ function renderMusicView() {
         <input class="fc-music-volume" type="range" min="0" max="100" step="1" value="${Math.round(volume * 100)}" aria-label="Personal Foundry playlist volume">
       </div>
       <small>This only changes playlist volume for you. The GM still controls playback.</small>
+    </div>
+    <div class="fc-music-volume-card fc-music-ambient-card">
+      <div class="fc-music-volume-head"><span>Your Environment Volume</span><strong class="fc-music-ambient-value">${Math.round(ambientVolume * 100)}%</strong></div>
+      <div class="fc-music-volume-row">
+        <button type="button" class="fc-music-ambient-mute fc-music-mute" aria-label="Mute or restore environment sounds"><i class="fa-solid ${ambientVolume <= 0.01 ? 'fa-volume-xmark' : 'fa-tree'}"></i></button>
+        <input class="fc-music-ambient-volume fc-music-volume" type="range" min="0" max="100" step="1" value="${Math.round(ambientVolume * 100)}" aria-label="Personal Foundry ambient sound volume">
+      </div>
+      <small>Controls Scene ambient/environment sounds only for you.</small>
     </div>
   `;
   container.appendChild(shell);
@@ -8081,9 +8224,9 @@ function renderMusicView() {
     container.appendChild(section);
   }
 
-  const slider = shell.querySelector('.fc-music-volume');
+  const slider = shell.querySelector('.fc-music-volume:not(.fc-music-ambient-volume)');
   const label = shell.querySelector('.fc-music-volume-value');
-  const mute = shell.querySelector('.fc-music-mute');
+  const mute = shell.querySelector('.fc-music-mute:not(.fc-music-ambient-mute)');
   slider.addEventListener('input', () => {
     const next = Math.max(0, Math.min(100, Number(slider.value) || 0));
     label.textContent = `${Math.round(next)}%`;
@@ -8106,6 +8249,34 @@ function renderMusicView() {
       renderMusicView();
     } catch (error) {
       console.warn(`${MODULE_ID} | Could not change playlist volume`, error);
+    }
+  });
+
+  const ambientSlider = shell.querySelector('.fc-music-ambient-volume');
+  const ambientLabel = shell.querySelector('.fc-music-ambient-value');
+  const ambientMute = shell.querySelector('.fc-music-ambient-mute');
+  ambientSlider.addEventListener('input', () => {
+    const next = Math.max(0, Math.min(100, Number(ambientSlider.value) || 0));
+    ambientLabel.textContent = `${Math.round(next)}%`;
+    ambientMute.querySelector('i').className = `fa-solid ${next <= 1 ? 'fa-volume-xmark' : 'fa-tree'}`;
+    setAmbientVolume(next / 100);
+  });
+  ambientSlider.addEventListener('change', async () => {
+    const next = Math.max(0, Math.min(100, Number(ambientSlider.value) || 0));
+    if (state.musicAmbientVolumeTimer) window.clearTimeout(state.musicAmbientVolumeTimer);
+    state.musicAmbientVolumeTimer = null;
+    try { await game.settings.set('core', 'globalAmbientVolume', next / 100); }
+    catch (error) { console.warn(`${MODULE_ID} | Could not change ambient volume`, error); }
+  });
+  ambientMute.addEventListener('click', async () => {
+    const current = getAmbientVolume();
+    const next = current > 0.01 ? 0 : Math.max(0.05, state.musicLastAmbientVolume || 0.7);
+    if (current > 0.01) state.musicLastAmbientVolume = current;
+    try {
+      await game.settings.set('core', 'globalAmbientVolume', next);
+      renderMusicView();
+    } catch (error) {
+      console.warn(`${MODULE_ID} | Could not change ambient volume`, error);
     }
   });
 }

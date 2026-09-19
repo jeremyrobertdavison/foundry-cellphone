@@ -336,11 +336,40 @@
   line-height: 1.35;
 }
 
-.fc-bubble-time {
+.fc-bubble-footer {
   margin-top: 3px;
-  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.fc-bubble-time {
   font-size: 8px;
   color: rgba(255,255,255,.55);
+}
+
+.fc-bubble-delete {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: -2px -3px -2px 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255,255,255,.42);
+  box-shadow: none;
+  font-size: 7px;
+  cursor: pointer;
+}
+
+.fc-bubble-delete:hover {
+  background: rgba(0,0,0,.14);
+  color: #fff;
 }
 
 .fc-composer {
@@ -1817,6 +1846,14 @@
   background: rgba(255,255,255,.08);
 }
 
+.fc-friend-comment-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
 .fc-friend-comment-bubble {
   min-width: 0;
   display: flex;
@@ -1839,6 +1876,48 @@
   font-size: 9px;
   line-height: 1.35;
   user-select: text;
+}
+
+.fc-friend-comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: 2px;
+}
+
+.fc-friend-comment-reaction {
+  width: auto;
+  min-width: 28px;
+  min-height: 19px;
+  height: 19px;
+  margin: 0;
+  padding: 2px 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255,255,255,.42);
+  box-shadow: none;
+  font-size: 7px;
+  cursor: pointer;
+}
+
+.fc-friend-comment-reaction:hover {
+  background: rgba(255,255,255,.06);
+  color: #fff;
+}
+
+.fc-friend-comment-reaction.is-active {
+  background: rgba(109,87,217,.16);
+  color: #cfc6ff;
+}
+
+.fc-friend-comment-reaction:disabled {
+  opacity: .45;
+  cursor: default;
 }
 
 .fc-friend-comment-form {
