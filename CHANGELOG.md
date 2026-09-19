@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.0
+
+- Added **Chess** as the eighth Arcade game.
+- Chess is single-player against a lightweight phone AI; the player always controls White.
+- Added legal movement for pawns, knights, bishops, rooks, queens, and kings, including captures, check detection, checkmate, stalemate, and automatic queen promotion.
+- Arcade Chess intentionally omits castling and en passant to keep the phone implementation compact.
+- Added local Chess win/loss/draw statistics.
+- Added **Farkle** as the ninth Arcade game.
+- Farkle is a first-to-3000 match against the phone with six dice, selectable scoring dice, Roll Again, Bank, hot dice, and farkles.
+- Added common Farkle scoring for 1s, 5s, triples, four/five/six of a kind, straights, three pairs, two triplets, and four-of-a-kind plus a pair.
+- Added a simple risk-aware phone opponent and local Farkle win/loss statistics.
+- Existing Arcade games and all other cellphone apps are unchanged.
+
 ## 2.2.0
 
 - Added the **Music** cellphone app with a generic streaming-service-inspired interface.

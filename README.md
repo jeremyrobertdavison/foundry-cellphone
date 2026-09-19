@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **2.2.0** adds a **Music** app that mirrors Foundry playlist playback with a personal volume control, plus **Block Drop**, a new falling-block Arcade game.
+Version **2.3.0** expands the **Arcade** with **Chess** and **Farkle**, bringing the phone to nine built-in downtime games.
 
 ## Cellphone apps
 
@@ -12,7 +12,7 @@ Version **2.2.0** adds a **Music** app that mirrors Foundry playlist playback wi
 - **Browser** — GM-configured external website shortcuts plus permission-aware Foundry Journal search inside the phone.
 - **Notes** — private per-user notes with title/body editing and deletion.
 - **News** — GM-authored headline feed with blurb, publisher, author, and publication date/time.
-- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, Guess My Number, Stack It, and Block Drop.
+- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, Guess My Number, Stack It, Block Drop, Chess, and Farkle.
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
 - **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
 - **Music** — streaming-style now-playing view for Foundry playlists with a client-only personal music-volume slider.
@@ -74,7 +74,7 @@ The News app is a read-only feed for players. GMs can publish, edit, and delete 
 
 ## Arcade
 
-The Arcade includes seven lightweight single-player games:
+The Arcade includes nine lightweight games:
 
 - **Snake** — keyboard/WASD and on-screen controls, pause/resume, local best score.
 - **Tic Tac Toe** — play against a simple phone AI with local win/loss/draw stats.
@@ -83,6 +83,8 @@ The Arcade includes seven lightweight single-player games:
 - **Guess My Number** — guess a number from 1–100 with Too high / Too low feedback.
 - **Stack It** — time moving blocks to build the tallest tower possible; overhang is trimmed and a complete miss ends the run. Supports tap/click, Space/Enter, pause/resume, and a local best score.
 - **Block Drop** — a classic falling-block puzzle with seven block shapes, row clearing, increasing speed, keyboard/on-screen controls, hard drop, pause/resume, and local best score.
+- **Chess** — play White against a lightweight phone AI with legal move validation, check, checkmate, stalemate, captures, and automatic queen promotion. Arcade Chess intentionally omits castling and en passant.
+- **Farkle** — a quick first-to-3000 dice game against the phone with selectable scoring dice, banking, hot dice, farkles, common combination scoring, and local win/loss stats.
 
 Snake, Runner, Stack It, and Block Drop automatically pause when appropriate, including when leaving Arcade or closing the phone.
 
@@ -117,7 +119,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v2.2.0.zip
+foundry-cellphone-v2.3.0.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md

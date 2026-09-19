@@ -85,6 +85,8 @@ const state = {
   guessNumber: { target: Math.floor(Math.random() * 100) + 1, attempts: 0, status: "playing", feedback: "I picked a number from 1 to 100." },
   stackIt: { layers: [], moving: null, running: false, paused: false, gameOver: false, interval: null, score: 0, direction: 1, speed: 1.25 },
   blockDrop: { board: [], current: null, next: null, running: false, paused: false, gameOver: false, interval: null, score: 0, lines: 0 },
+  chess: { board: [], turn: "w", status: "playing", selected: null, legalTargets: [], message: "Your move", aiTimer: null },
+  farkle: { playerScore: 0, phoneScore: 0, turnScore: 0, diceCount: 6, dice: [], selected: new Set(), status: "player", message: "Roll the dice to start.", rolled: false, phoneTimer: null },
   musicLastVolume: 0.7,
   musicVolumeTimer: null,
   unreadGroups: new Map(),
@@ -165,7 +167,7 @@ Hooks.once("init", () => {
     scope: "client",
     config: false,
     type: Object,
-    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0 },
+    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0, chessWins: 0, chessLosses: 0, chessDraws: 0, farkleWins: 0, farkleLosses: 0 },
     onChange: () => refreshAll()
   });
 
@@ -1328,7 +1330,7 @@ function updateHeader() {
 
   if (state.app === "arcade") {
     back.hidden = false;
-    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop" };
+    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop", chess: "Chess", farkle: "Farkle" };
     title.textContent = arcadeTitles[state.arcadeGame] || "Arcade";
     subtitle.textContent = state.arcadeGame === "menu" ? "Pick a game" : "Cellphone games";
     return;
@@ -6003,7 +6005,12 @@ function getArcadeStats() {
     guessNumberWins: Number(raw.guessNumberWins || 0),
     guessNumberBestAttempts: Number(raw.guessNumberBestAttempts || 0),
     stackItBest: Number(raw.stackItBest || 0),
-    blockDropBest: Number(raw.blockDropBest || 0)
+    blockDropBest: Number(raw.blockDropBest || 0),
+    chessWins: Number(raw.chessWins || 0),
+    chessLosses: Number(raw.chessLosses || 0),
+    chessDraws: Number(raw.chessDraws || 0),
+    farkleWins: Number(raw.farkleWins || 0),
+    farkleLosses: Number(raw.farkleLosses || 0)
   };
 }
 
@@ -6049,13 +6056,21 @@ function renderArcadeView() {
     renderBlockDropGame(container);
     return;
   }
+  if (state.arcadeGame === 'chess') {
+    renderChessGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'farkle') {
+    renderFarkleGame(container);
+    return;
+  }
   renderArcadeMenu(container);
 }
 
 function renderArcadeMenu(container) {
   const intro = document.createElement('div');
   intro.className = 'fc-arcade-intro';
-  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Seven quick games for downtime between scenes.</span></div>';
+  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Nine quick games for downtime between scenes.</span></div>';
   container.appendChild(intro);
 
   const stats = getArcadeStats();
@@ -6160,7 +6175,35 @@ function renderArcadeMenu(container) {
     renderPhone();
   });
 
-  grid.append(snake, ttt, mines, runner, guess, stack, blockDrop);
+  const chess = document.createElement('button');
+  chess.type = 'button';
+  chess.className = 'fc-arcade-game-card';
+  chess.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-chess"><i class="fa-solid fa-chess-knight"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Chess</strong><small>${stats.chessWins}W · ${stats.chessLosses}L · ${stats.chessDraws}D</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  chess.addEventListener('click', () => {
+    state.arcadeGame = 'chess';
+    if (!state.chess.board.length || state.chess.status !== 'playing') resetChessGame();
+    renderPhone();
+  });
+
+  const farkle = document.createElement('button');
+  farkle.type = 'button';
+  farkle.className = 'fc-arcade-game-card';
+  farkle.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-farkle"><i class="fa-solid fa-dice"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Farkle</strong><small>${stats.farkleWins}W · ${stats.farkleLosses}L vs phone</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  farkle.addEventListener('click', () => {
+    state.arcadeGame = 'farkle';
+    if (state.farkle.status === 'over') resetFarkleGame();
+    renderPhone();
+  });
+
+  grid.append(snake, ttt, mines, runner, guess, stack, blockDrop, chess, farkle);
   container.appendChild(grid);
 }
 
@@ -6169,6 +6212,8 @@ function pauseArcadeActionGames() {
   pauseRunnerGame();
   pauseStackItGame();
   pauseBlockDropGame();
+  stopChessAi();
+  stopFarklePhoneTimer();
 }
 
 function resetSnakeGame() {
@@ -7385,6 +7430,574 @@ function updateBlockDropBoard() {
     else if (state.blockDrop.running) start.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
     else start.innerHTML = '<i class="fa-solid fa-play"></i> Resume';
   }
+}
+
+
+// ---------------------------
+// Chess
+// ---------------------------
+
+const CHESS_GLYPHS = {
+  wK: '♔', wQ: '♕', wR: '♖', wB: '♗', wN: '♘', wP: '♙',
+  bK: '♚', bQ: '♛', bR: '♜', bB: '♝', bN: '♞', bP: '♟'
+};
+const CHESS_VALUES = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 100 };
+
+function makeInitialChessBoard() {
+  return [
+    'bR','bN','bB','bQ','bK','bB','bN','bR',
+    'bP','bP','bP','bP','bP','bP','bP','bP',
+    ...Array(32).fill(null),
+    'wP','wP','wP','wP','wP','wP','wP','wP',
+    'wR','wN','wB','wQ','wK','wB','wN','wR'
+  ];
+}
+
+function resetChessGame() {
+  stopChessAi();
+  state.chess.board = makeInitialChessBoard();
+  state.chess.turn = 'w';
+  state.chess.status = 'playing';
+  state.chess.selected = null;
+  state.chess.legalTargets = [];
+  state.chess.message = 'Your move — you are White.';
+}
+
+function stopChessAi() {
+  if (state.chess?.aiTimer) {
+    window.clearTimeout(state.chess.aiTimer);
+    state.chess.aiTimer = null;
+  }
+}
+
+function chessColor(piece) { return piece?.[0] || null; }
+function chessType(piece) { return piece?.[1] || null; }
+function chessIndex(row, col) { return row * 8 + col; }
+function chessRow(index) { return Math.floor(index / 8); }
+function chessCol(index) { return index % 8; }
+function chessInside(row, col) { return row >= 0 && row < 8 && col >= 0 && col < 8; }
+function chessOther(color) { return color === 'w' ? 'b' : 'w'; }
+
+function getChessPseudoMoves(board, index, attacksOnly = false) {
+  const piece = board[index];
+  if (!piece) return [];
+  const color = chessColor(piece);
+  const type = chessType(piece);
+  const row = chessRow(index);
+  const col = chessCol(index);
+  const moves = [];
+  const push = (r, c, allowOwn = false) => {
+    if (!chessInside(r,c)) return false;
+    const target = chessIndex(r,c);
+    const occupied = board[target];
+    if (!occupied) { moves.push(target); return true; }
+    if (allowOwn || chessColor(occupied) !== color) moves.push(target);
+    return false;
+  };
+
+  if (type === 'P') {
+    const dir = color === 'w' ? -1 : 1;
+    const startRow = color === 'w' ? 6 : 1;
+    for (const dc of [-1,1]) {
+      const r = row + dir, c = col + dc;
+      if (!chessInside(r,c)) continue;
+      const target = chessIndex(r,c);
+      if (attacksOnly || (board[target] && chessColor(board[target]) !== color)) moves.push(target);
+    }
+    if (!attacksOnly) {
+      const oneRow = row + dir;
+      const one = chessInside(oneRow,col) ? chessIndex(oneRow,col) : -1;
+      if (one >= 0 && !board[one]) {
+        moves.push(one);
+        const twoRow = row + dir * 2;
+        const two = chessInside(twoRow,col) ? chessIndex(twoRow,col) : -1;
+        if (row === startRow && two >= 0 && !board[two]) moves.push(two);
+      }
+    }
+    return moves;
+  }
+
+  if (type === 'N') {
+    for (const [dr,dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) {
+      const r=row+dr,c=col+dc;
+      if (!chessInside(r,c)) continue;
+      const target=chessIndex(r,c), occupied=board[target];
+      if (!occupied || chessColor(occupied)!==color) moves.push(target);
+    }
+    return moves;
+  }
+
+  if (type === 'K') {
+    for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
+      if (!dr && !dc) continue;
+      const r=row+dr,c=col+dc;
+      if (!chessInside(r,c)) continue;
+      const target=chessIndex(r,c), occupied=board[target];
+      if (!occupied || chessColor(occupied)!==color) moves.push(target);
+    }
+    return moves;
+  }
+
+  const dirs = [];
+  if (type === 'B' || type === 'Q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+  if (type === 'R' || type === 'Q') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+  for (const [dr,dc] of dirs) {
+    let r=row+dr,c=col+dc;
+    while (chessInside(r,c)) {
+      if (!push(r,c)) break;
+      r+=dr; c+=dc;
+    }
+  }
+  return moves;
+}
+
+function isChessSquareAttacked(board, square, byColor) {
+  for (let i=0; i<64; i++) {
+    const piece=board[i];
+    if (!piece || chessColor(piece)!==byColor) continue;
+    if (getChessPseudoMoves(board,i,true).includes(square)) return true;
+  }
+  return false;
+}
+
+function findChessKing(board, color) {
+  return board.findIndex((piece) => piece === `${color}K`);
+}
+
+function isChessInCheck(board, color) {
+  const king = findChessKing(board,color);
+  if (king < 0) return true;
+  return isChessSquareAttacked(board,king,chessOther(color));
+}
+
+function applyChessMoveToBoard(board, from, to) {
+  const next=[...board];
+  const piece=next[from];
+  next[to]=piece;
+  next[from]=null;
+  if (piece?.[1]==='P') {
+    const row=chessRow(to);
+    if ((piece[0]==='w' && row===0) || (piece[0]==='b' && row===7)) next[to]=`${piece[0]}Q`;
+  }
+  return next;
+}
+
+function getChessLegalMovesForPiece(board,index,color=chessColor(board[index])) {
+  const piece=board[index];
+  if (!piece || chessColor(piece)!==color) return [];
+  return getChessPseudoMoves(board,index,false).filter((to) => {
+    const target=board[to];
+    if (target && chessType(target)==='K') return false;
+    const next=applyChessMoveToBoard(board,index,to);
+    return !isChessInCheck(next,color);
+  });
+}
+
+function getAllChessLegalMoves(board,color) {
+  const moves=[];
+  for (let from=0;from<64;from++) {
+    if (chessColor(board[from])!==color) continue;
+    for (const to of getChessLegalMovesForPiece(board,from,color)) moves.push({from,to});
+  }
+  return moves;
+}
+
+function finishChessIfNeeded(nextTurn) {
+  const moves=getAllChessLegalMoves(state.chess.board,nextTurn);
+  if (moves.length) {
+    const check=isChessInCheck(state.chess.board,nextTurn);
+    state.chess.message = nextTurn==='w' ? (check ? 'Check — your move.' : 'Your move.') : (check ? 'Phone is in check.' : 'Phone is thinking…');
+    return false;
+  }
+  const check=isChessInCheck(state.chess.board,nextTurn);
+  const stats=getArcadeStats();
+  if (check) {
+    const winner=chessOther(nextTurn);
+    state.chess.status=winner==='w' ? 'won' : 'lost';
+    state.chess.message=winner==='w' ? 'Checkmate — you win!' : 'Checkmate — phone wins.';
+    if (winner==='w') void saveArcadeStats({chessWins:stats.chessWins+1});
+    else void saveArcadeStats({chessLosses:stats.chessLosses+1});
+  } else {
+    state.chess.status='draw';
+    state.chess.message='Stalemate — draw.';
+    void saveArcadeStats({chessDraws:stats.chessDraws+1});
+  }
+  state.chess.turn='none';
+  return true;
+}
+
+function makeChessMove(from,to) {
+  if (state.chess.status!=='playing') return false;
+  const color=chessColor(state.chess.board[from]);
+  if (color!==state.chess.turn) return false;
+  if (!getChessLegalMovesForPiece(state.chess.board,from,color).includes(to)) return false;
+  state.chess.board=applyChessMoveToBoard(state.chess.board,from,to);
+  state.chess.selected=null;
+  state.chess.legalTargets=[];
+  const next=chessOther(color);
+  state.chess.turn=next;
+  if (finishChessIfNeeded(next)) { renderChessGameIntoExisting(); return true; }
+  renderChessGameIntoExisting();
+  if (next==='b') scheduleChessAi();
+  return true;
+}
+
+function scheduleChessAi() {
+  stopChessAi();
+  if (state.chess.status!=='playing' || state.chess.turn!=='b') return;
+  state.chess.aiTimer=window.setTimeout(() => {
+    state.chess.aiTimer=null;
+    if (state.chess.status!=='playing' || state.chess.turn!=='b') return;
+    const moves=getAllChessLegalMoves(state.chess.board,'b');
+    if (!moves.length) { finishChessIfNeeded('b'); renderChessGameIntoExisting(); return; }
+    let best=-Infinity, choices=[];
+    for (const move of moves) {
+      const captured=state.chess.board[move.to];
+      let score=(captured ? CHESS_VALUES[chessType(captured)]*10 : 0) + Math.random()*2;
+      const next=applyChessMoveToBoard(state.chess.board,move.from,move.to);
+      if (isChessInCheck(next,'w')) score+=4;
+      const r=chessRow(move.to),c=chessCol(move.to);
+      score += (3.5-Math.abs(3.5-r))*.15 + (3.5-Math.abs(3.5-c))*.15;
+      if (score>best+0.001) { best=score; choices=[move]; }
+      else if (Math.abs(score-best)<0.001) choices.push(move);
+    }
+    const move=choices[Math.floor(Math.random()*choices.length)] || moves[0];
+    state.chess.board=applyChessMoveToBoard(state.chess.board,move.from,move.to);
+    state.chess.turn='w';
+    finishChessIfNeeded('w');
+    renderChessGameIntoExisting();
+  }, 420);
+}
+
+function onChessSquare(index) {
+  if (state.chess.status!=='playing' || state.chess.turn!=='w') return;
+  const piece=state.chess.board[index];
+  if (state.chess.selected !== null && state.chess.legalTargets.includes(index)) {
+    makeChessMove(state.chess.selected,index);
+    return;
+  }
+  if (chessColor(piece)==='w') {
+    state.chess.selected=index;
+    state.chess.legalTargets=getChessLegalMovesForPiece(state.chess.board,index,'w');
+  } else {
+    state.chess.selected=null;
+    state.chess.legalTargets=[];
+  }
+  renderChessGameIntoExisting();
+}
+
+function renderChessGame(container) {
+  if (!state.chess.board.length) resetChessGame();
+  const stats=getArcadeStats();
+  const shell=document.createElement('div');
+  shell.className='fc-chess-shell';
+  shell.innerHTML=`
+    <div class="fc-ttt-stats"><span>${stats.chessWins} Wins</span><span>${stats.chessLosses} Losses</span><span>${stats.chessDraws} Draws</span></div>
+    <div class="fc-chess-note">You play White · pawn promotion is automatic · castling/en passant are omitted in Arcade mode.</div>
+    <div class="fc-chess-board" role="grid" aria-label="Chess board"></div>
+    <div class="fc-chess-status"></div>
+    <button type="button" class="fc-arcade-primary fc-chess-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+  `;
+  container.appendChild(shell);
+  const board=shell.querySelector('.fc-chess-board');
+  for (let i=0;i<64;i++) {
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='fc-chess-square';
+    button.dataset.chessIndex=String(i);
+    button.addEventListener('click',()=>onChessSquare(i));
+    board.appendChild(button);
+  }
+  shell.querySelector('.fc-chess-new').addEventListener('click',()=>{ resetChessGame(); renderPhone(); });
+  updateChessBoard();
+  if (state.chess.status==='playing' && state.chess.turn==='b' && !state.chess.aiTimer) scheduleChessAi();
+}
+
+function renderChessGameIntoExisting() {
+  if (!state.phoneOpen || state.app!=='arcade' || state.arcadeGame!=='chess') return;
+  updateChessBoard();
+}
+
+function updateChessBoard() {
+  const board=state.root?.querySelector('.fc-chess-board');
+  if (!board) return;
+  const whiteCheck = state.chess.status==='playing' && isChessInCheck(state.chess.board,'w');
+  const blackCheck = state.chess.status==='playing' && isChessInCheck(state.chess.board,'b');
+  [...board.children].forEach((button,index)=>{
+    const row=chessRow(index),col=chessCol(index),piece=state.chess.board[index];
+    button.className=`fc-chess-square ${(row+col)%2 ? 'is-dark' : 'is-light'}`;
+    if (state.chess.selected===index) button.classList.add('is-selected');
+    if (state.chess.legalTargets.includes(index)) button.classList.add(piece ? 'is-capture' : 'is-target');
+    if ((piece==='wK'&&whiteCheck)||(piece==='bK'&&blackCheck)) button.classList.add('is-check');
+    button.textContent=piece ? CHESS_GLYPHS[piece] : '';
+    button.setAttribute('aria-label',piece ? `${piece[0]==='w'?'White':'Black'} ${piece[1]}` : 'Empty square');
+    button.disabled = state.chess.status!=='playing' || state.chess.turn!=='w';
+  });
+  const status=state.root?.querySelector('.fc-chess-status');
+  if (status) status.textContent=state.chess.message;
+}
+
+// ---------------------------
+// Farkle
+// ---------------------------
+
+const FARKLE_TARGET = 3000;
+
+function stopFarklePhoneTimer() {
+  if (state.farkle?.phoneTimer) {
+    window.clearTimeout(state.farkle.phoneTimer);
+    state.farkle.phoneTimer=null;
+  }
+}
+
+function resetFarkleGame() {
+  stopFarklePhoneTimer();
+  state.farkle.playerScore=0;
+  state.farkle.phoneScore=0;
+  state.farkle.turnScore=0;
+  state.farkle.diceCount=6;
+  state.farkle.dice=[];
+  state.farkle.selected=new Set();
+  state.farkle.status='player';
+  state.farkle.message=`First to ${FARKLE_TARGET}. Roll the dice to start.`;
+  state.farkle.rolled=false;
+}
+
+function rollFarkleDice(count) {
+  return Array.from({length:count},()=>Math.floor(Math.random()*6)+1);
+}
+
+function scoreFarkleSelection(values) {
+  if (!values?.length) return 0;
+  const counts=Array(7).fill(0);
+  values.forEach(v=>counts[v]++);
+  const n=values.length;
+  if (n===6) {
+    if ([1,2,3,4,5,6].every(v=>counts[v]===1)) return 1500;
+    const groups=counts.slice(1).filter(Boolean).sort((a,b)=>a-b);
+    if (groups.length===3 && groups.every(c=>c===2)) return 1500;
+    if (groups.length===2 && groups.every(c=>c===3)) return 2500;
+    if (groups.length===2 && groups.includes(4) && groups.includes(2)) return 1500;
+  }
+  let score=0;
+  for (let face=1;face<=6;face++) {
+    let count=counts[face];
+    if (count>=3) {
+      if (count===6) { score+=3000; count=0; }
+      else if (count===5) { score+=2000; count=0; }
+      else if (count===4) { score+=1000; count=0; }
+      else { score += face===1 ? 1000 : face*100; count-=3; }
+    }
+    if (count>0) {
+      if (face===1) score+=count*100;
+      else if (face===5) score+=count*50;
+      else return null;
+    }
+  }
+  return score;
+}
+
+function getBestFarkleSelection(values) {
+  let best={score:0,indices:[]};
+  const total=1<<values.length;
+  for (let mask=1;mask<total;mask++) {
+    const subset=[],indices=[];
+    for (let i=0;i<values.length;i++) if (mask&(1<<i)) { subset.push(values[i]); indices.push(i); }
+    const score=scoreFarkleSelection(subset);
+    if (score===null || score<=0) continue;
+    if (score>best.score || (score===best.score && indices.length<best.indices.length)) best={score,indices};
+  }
+  return best;
+}
+
+function farkleRollHasScore(values) {
+  return getBestFarkleSelection(values).score>0;
+}
+
+function rollPlayerFarkle() {
+  if (state.farkle.status!=='player') return;
+  state.farkle.dice=rollFarkleDice(state.farkle.diceCount);
+  state.farkle.selected=new Set();
+  state.farkle.rolled=true;
+  if (!farkleRollHasScore(state.farkle.dice)) {
+    state.farkle.turnScore=0;
+    state.farkle.message='Farkle! No scoring dice — your turn scores 0.';
+    state.farkle.status='phone';
+    updateFarkleBoard();
+    scheduleFarklePhoneTurn();
+    return;
+  }
+  state.farkle.message='Select scoring dice, then Roll Again or Bank.';
+  updateFarkleBoard();
+}
+
+function toggleFarkleDie(index) {
+  if (state.farkle.status!=='player' || !state.farkle.rolled) return;
+  if (state.farkle.selected.has(index)) state.farkle.selected.delete(index);
+  else state.farkle.selected.add(index);
+  updateFarkleBoard();
+}
+
+function getSelectedFarkleValues() {
+  return [...state.farkle.selected].sort((a,b)=>a-b).map(i=>state.farkle.dice[i]);
+}
+
+function commitFarkleSelection() {
+  const values=getSelectedFarkleValues();
+  const score=scoreFarkleSelection(values);
+  if (!score || score<1) return null;
+  state.farkle.turnScore+=score;
+  state.farkle.diceCount-=values.length;
+  if (state.farkle.diceCount<=0) state.farkle.diceCount=6;
+  state.farkle.selected=new Set();
+  state.farkle.dice=[];
+  state.farkle.rolled=false;
+  return score;
+}
+
+function continueFarkleTurn() {
+  if (state.farkle.status!=='player') return;
+  const committed=commitFarkleSelection();
+  if (!committed) { state.farkle.message='Choose only scoring dice before rolling again.'; updateFarkleBoard(); return; }
+  state.farkle.message=state.farkle.diceCount===6 ? `Hot dice! ${state.farkle.turnScore} points this turn — rolling all six again.` : `${state.farkle.turnScore} points this turn — rolling ${state.farkle.diceCount} dice.`;
+  rollPlayerFarkle();
+}
+
+function bankFarkleTurn() {
+  if (state.farkle.status!=='player') return;
+  const committed=commitFarkleSelection();
+  if (!committed) { state.farkle.message='Choose scoring dice before banking.'; updateFarkleBoard(); return; }
+  state.farkle.playerScore+=state.farkle.turnScore;
+  if (state.farkle.playerScore>=FARKLE_TARGET) { finishFarkleGame('player'); return; }
+  const banked=state.farkle.turnScore;
+  state.farkle.turnScore=0;
+  state.farkle.diceCount=6;
+  state.farkle.status='phone';
+  state.farkle.message=`You banked ${banked}. Phone is rolling…`;
+  updateFarkleBoard();
+  scheduleFarklePhoneTurn();
+}
+
+function scheduleFarklePhoneTurn() {
+  stopFarklePhoneTimer();
+  state.farkle.phoneTimer=window.setTimeout(()=>{
+    state.farkle.phoneTimer=null;
+    if (state.farkle.status!=='phone') return;
+    playFarklePhoneTurn();
+  },650);
+}
+
+function playFarklePhoneTurn() {
+  let turn=0, diceCount=6, rolls=0, farkled=false;
+  while (rolls<12) {
+    rolls++;
+    const dice=rollFarkleDice(diceCount);
+    const best=getBestFarkleSelection(dice);
+    if (!best.score) { turn=0; farkled=true; break; }
+    turn+=best.score;
+    diceCount-=best.indices.length;
+    if (diceCount<=0) diceCount=6;
+    if (state.farkle.phoneScore+turn>=FARKLE_TARGET) break;
+    const bankThreshold = diceCount<=2 ? 250 : 400;
+    if (turn>=bankThreshold) break;
+  }
+  if (!farkled) state.farkle.phoneScore+=turn;
+  if (state.farkle.phoneScore>=FARKLE_TARGET) { finishFarkleGame('phone'); return; }
+  state.farkle.turnScore=0;
+  state.farkle.diceCount=6;
+  state.farkle.dice=[];
+  state.farkle.selected=new Set();
+  state.farkle.rolled=false;
+  state.farkle.status='player';
+  state.farkle.message=farkled ? 'Phone farkled! Your turn.' : `Phone banked ${turn}. Your turn.`;
+  updateFarkleBoard();
+}
+
+function finishFarkleGame(winner) {
+  stopFarklePhoneTimer();
+  const stats=getArcadeStats();
+  state.farkle.status='over';
+  if (winner==='player') {
+    state.farkle.message=`You win ${state.farkle.playerScore}–${state.farkle.phoneScore}!`;
+    void saveArcadeStats({farkleWins:stats.farkleWins+1});
+  } else {
+    state.farkle.message=`Phone wins ${state.farkle.phoneScore}–${state.farkle.playerScore}.`;
+    void saveArcadeStats({farkleLosses:stats.farkleLosses+1});
+  }
+  updateFarkleBoard();
+}
+
+function renderFarkleGame(container) {
+  const stats=getArcadeStats();
+  const shell=document.createElement('div');
+  shell.className='fc-farkle-shell';
+  shell.innerHTML=`
+    <div class="fc-farkle-score"><div><small>You</small><strong class="fc-farkle-player-score">${state.farkle.playerScore}</strong></div><span>First to ${FARKLE_TARGET}</span><div><small>Phone</small><strong class="fc-farkle-phone-score">${state.farkle.phoneScore}</strong></div></div>
+    <div class="fc-farkle-record">Record: ${stats.farkleWins}W · ${stats.farkleLosses}L</div>
+    <div class="fc-farkle-turn">Turn points <strong class="fc-farkle-turn-score">${state.farkle.turnScore}</strong></div>
+    <div class="fc-farkle-dice" aria-label="Farkle dice"></div>
+    <div class="fc-farkle-selection">Selected: <strong class="fc-farkle-selected-score">0</strong></div>
+    <div class="fc-farkle-status"></div>
+    <div class="fc-farkle-actions">
+      <button type="button" class="fc-arcade-primary fc-farkle-roll"><i class="fa-solid fa-dice"></i> Roll</button>
+      <button type="button" class="fc-arcade-secondary fc-farkle-bank"><i class="fa-solid fa-piggy-bank"></i> Bank</button>
+    </div>
+    <button type="button" class="fc-arcade-secondary fc-farkle-new"><i class="fa-solid fa-rotate-right"></i> New Match</button>
+    <div class="fc-farkle-rules">1s = 100 · 5s = 50 · triples score · straight / three pairs = 1500. Four, five, and six of a kind score 1000 / 2000 / 3000.</div>
+  `;
+  container.appendChild(shell);
+  shell.querySelector('.fc-farkle-roll').addEventListener('click',()=>{
+    if (state.farkle.status==='over') { resetFarkleGame(); renderPhone(); return; }
+    if (!state.farkle.rolled) rollPlayerFarkle();
+    else continueFarkleTurn();
+  });
+  shell.querySelector('.fc-farkle-bank').addEventListener('click',bankFarkleTurn);
+  shell.querySelector('.fc-farkle-new').addEventListener('click',()=>{ resetFarkleGame(); renderPhone(); });
+  updateFarkleBoard();
+  if (state.farkle.status==='phone' && !state.farkle.phoneTimer) scheduleFarklePhoneTurn();
+}
+
+function updateFarkleBoard() {
+  const diceEl=state.root?.querySelector('.fc-farkle-dice');
+  if (!diceEl) return;
+  diceEl.replaceChildren();
+  if (state.farkle.dice.length) {
+    state.farkle.dice.forEach((value,index)=>{
+      const button=document.createElement('button');
+      button.type='button';
+      button.className=`fc-farkle-die${state.farkle.selected.has(index)?' is-selected':''}`;
+      button.textContent=String(value);
+      button.setAttribute('aria-label',`Die showing ${value}${state.farkle.selected.has(index)?', selected':''}`);
+      button.disabled=state.farkle.status!=='player';
+      button.addEventListener('click',()=>toggleFarkleDie(index));
+      diceEl.appendChild(button);
+    });
+  } else {
+    const empty=document.createElement('div');
+    empty.className='fc-farkle-dice-empty';
+    empty.innerHTML='<i class="fa-solid fa-dice"></i><span>Ready to roll</span>';
+    diceEl.appendChild(empty);
+  }
+  const selectedScore=scoreFarkleSelection(getSelectedFarkleValues());
+  const selectedEl=state.root?.querySelector('.fc-farkle-selected-score');
+  if (selectedEl) selectedEl.textContent=selectedScore===null ? 'Invalid' : String(selectedScore||0);
+  const player=state.root?.querySelector('.fc-farkle-player-score');
+  const phone=state.root?.querySelector('.fc-farkle-phone-score');
+  const turn=state.root?.querySelector('.fc-farkle-turn-score');
+  if (player) player.textContent=String(state.farkle.playerScore);
+  if (phone) phone.textContent=String(state.farkle.phoneScore);
+  if (turn) turn.textContent=String(state.farkle.turnScore);
+  const status=state.root?.querySelector('.fc-farkle-status');
+  if (status) status.textContent=state.farkle.message;
+  const roll=state.root?.querySelector('.fc-farkle-roll');
+  const bank=state.root?.querySelector('.fc-farkle-bank');
+  if (roll) {
+    roll.disabled=state.farkle.status==='phone';
+    if (state.farkle.status==='over') roll.innerHTML='<i class="fa-solid fa-rotate-right"></i> Play Again';
+    else if (state.farkle.rolled) roll.innerHTML='<i class="fa-solid fa-dice"></i> Roll Again';
+    else roll.innerHTML=`<i class="fa-solid fa-dice"></i> Roll ${state.farkle.diceCount}`;
+  }
+  if (bank) bank.disabled=state.farkle.status!=='player' || !state.farkle.rolled;
 }
 
 // ---------------------------
