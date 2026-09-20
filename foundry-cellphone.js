@@ -111,6 +111,8 @@ const state = {
   callTimerInterval: null,
   root: null,
   launcher: null,
+  launcherResizeObserver: null,
+  launcherPositionRaf: null,
   drag: null
 };
 
@@ -325,6 +327,106 @@ function buildLauncher() {
   button.addEventListener("click", togglePhone);
   document.body.appendChild(button);
   state.launcher = button;
+  setupLauncherPositioning();
+}
+
+function getVisibleFoundryUiElement(selectors) {
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+    if (!element) continue;
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden" || rect.width < 1 || rect.height < 1) continue;
+    return element;
+  }
+  return null;
+}
+
+function scheduleLauncherPosition() {
+  if (state.launcherPositionRaf) cancelAnimationFrame(state.launcherPositionRaf);
+  state.launcherPositionRaf = requestAnimationFrame(() => {
+    state.launcherPositionRaf = null;
+    positionLauncher();
+  });
+}
+
+function positionLauncher() {
+  const launcher = state.launcher;
+  if (!launcher?.isConnected) return;
+
+  // Foundry's player list normally lives at lower-left and the macro hotbar
+  // occupies the lower center. Put the phone button in the gap between them.
+  const players = getVisibleFoundryUiElement([
+    "#players",
+    "#players-active",
+    ".players-list"
+  ]);
+  const hotbar = getVisibleFoundryUiElement([
+    "#hotbar",
+    "#action-bar",
+    ".hotbar"
+  ]);
+
+  if (!players) {
+    // Keep the original CSS location as a safe fallback if Foundry changes its UI.
+    launcher.style.removeProperty("left");
+    launcher.style.removeProperty("right");
+    launcher.style.removeProperty("top");
+    launcher.style.removeProperty("bottom");
+    return;
+  }
+
+  const playerRect = players.getBoundingClientRect();
+  const launcherWidth = launcher.offsetWidth || 46;
+  const launcherHeight = launcher.offsetHeight || 46;
+  const edge = 10;
+  const gap = 12;
+
+  let left = playerRect.right + gap;
+  let top = Math.max(edge, Math.min(window.innerHeight - launcherHeight - edge, playerRect.bottom - launcherHeight));
+
+  if (hotbar) {
+    const hotbarRect = hotbar.getBoundingClientRect();
+    const maximumLeftBeforeHotbar = hotbarRect.left - launcherWidth - gap;
+
+    if (maximumLeftBeforeHotbar >= left) {
+      // There is a clean horizontal gap: center the button vertically on the hotbar.
+      left = Math.min(left, maximumLeftBeforeHotbar);
+      top = hotbarRect.top + ((hotbarRect.height - launcherHeight) / 2);
+    } else {
+      // Narrow window fallback: stay right of the player list and sit just above
+      // the hotbar rather than covering either control.
+      top = hotbarRect.top - launcherHeight - gap;
+    }
+  }
+
+  left = Math.max(edge, Math.min(window.innerWidth - launcherWidth - edge, left));
+  top = Math.max(edge, Math.min(window.innerHeight - launcherHeight - edge, top));
+
+  launcher.style.left = `${Math.round(left)}px`;
+  launcher.style.top = `${Math.round(top)}px`;
+  launcher.style.right = "auto";
+  launcher.style.bottom = "auto";
+}
+
+function setupLauncherPositioning() {
+  scheduleLauncherPosition();
+  window.addEventListener("resize", scheduleLauncherPosition, { passive: true });
+
+  state.launcherResizeObserver?.disconnect?.();
+  if (typeof ResizeObserver !== "undefined") {
+    state.launcherResizeObserver = new ResizeObserver(scheduleLauncherPosition);
+    const players = getVisibleFoundryUiElement(["#players", "#players-active", ".players-list"]);
+    const hotbar = getVisibleFoundryUiElement(["#hotbar", "#action-bar", ".hotbar"]);
+    if (players) state.launcherResizeObserver.observe(players);
+    if (hotbar) state.launcherResizeObserver.observe(hotbar);
+  }
+
+  // Re-check after Foundry renders or refreshes either area. Hook names differ
+  // slightly across supported Foundry generations, so listening to both is safe.
+  Hooks.on("renderPlayerList", scheduleLauncherPosition);
+  Hooks.on("renderPlayers", scheduleLauncherPosition);
+  Hooks.on("renderHotbar", scheduleLauncherPosition);
 }
 
 function buildPhone() {

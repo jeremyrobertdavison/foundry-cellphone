@@ -132,3 +132,8 @@ foundry-cellphone-v2.4.0.zip
 ├── scripts/
 └── styles/
 ```
+
+
+### Launcher placement
+
+The floating cellphone button automatically positions itself to the right of Foundry's player list and before the macro hotbar when that space is available, reducing overlap as more users join the world.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.1
+
+- Repositioned the floating cellphone launcher so it sits to the right of Foundry's player list instead of above it.
+- The launcher now uses the available gap between the player list and macro hotbar when both are visible.
+- Added responsive positioning for window/UI size changes, with a safe fallback if Foundry's surrounding UI cannot be detected.
+- No cellphone app behavior or stored data changed.
+
 ## 2.4.0
 
 - Added a personal **Environment Volume** control to the Music app using Foundry's client-side Ambient volume setting.
