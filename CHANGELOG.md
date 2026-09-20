@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.4.3
+
+- Removed the floating cellphone launcher entirely, eliminating overlap with Foundry's player list and macro hotbar.
+- Added **Open Cellphone** as a native-style button in Foundry's left-side Scene Controls toolbar.
+- The cellphone button is added to every Scene Control tool palette so it remains available while switching between token, measurement, lighting, tile, wall, and other controls.
+- Preserved the cellphone unread badge on the toolbar button.
+- Added compatibility handling for Foundry v13's record-based Scene Controls and Foundry v12's array-based Scene Controls.
+- Existing cellphone apps, settings, messages, maps, and other stored data are unchanged.
+
 ## 2.4.2
 
 - Fixed the cellphone launcher still overlapping the visible Foundry player-list panel on some v13 layouts/themes.

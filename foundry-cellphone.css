@@ -1,31 +1,8 @@
-#foundry-cellphone-launcher.fc-launcher {
-  position: fixed;
-  left: 18px;
-  bottom: 110px;
-  z-index: 80;
-  width: 46px;
-  height: 46px;
-  min-width: 46px;
-  padding: 0;
-  border: 1px solid rgba(255,255,255,.18);
-  border-radius: 50%;
-  background: rgba(15, 18, 24, .92);
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(0,0,0,.38);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  backdrop-filter: blur(10px);
+/* Cellphone launcher now lives inside Foundry's native Scene Controls toolbar. */
+.fc-toolbar-phone-button {
+  position: relative;
 }
 
-#foundry-cellphone-launcher.fc-launcher:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(0,0,0,.48);
-}
-
-#foundry-cellphone-launcher.fc-launcher i {
-  font-size: 21px;
-}
 
 .fc-launcher-badge,
 .fc-tab-badge,
@@ -45,9 +22,11 @@
 
 .fc-launcher-badge {
   position: absolute;
-  top: -4px;
+  top: -5px;
   right: -5px;
+  z-index: 2;
   border: 2px solid #171a20;
+  pointer-events: none;
 }
 
 .fc-phone-root {
@@ -535,10 +514,6 @@
 }
 
 @media (max-width: 720px) {
-  #foundry-cellphone-launcher.fc-launcher {
-    left: 12px;
-    bottom: 90px;
-  }
   .fc-phone { height: min(82vh, 600px); }
 }
 

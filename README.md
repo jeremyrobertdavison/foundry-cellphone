@@ -123,7 +123,7 @@ https://github.com/jeremyrobertdavison/foundry-cellphone
 The release archive must contain `module.json` at the root of the ZIP:
 
 ```text
-foundry-cellphone-v2.4.0.zip
+foundry-cellphone-v2.4.3.zip
 ├── module.json
 ├── README.md
 ├── CHANGELOG.md
@@ -134,6 +134,6 @@ foundry-cellphone-v2.4.0.zip
 ```
 
 
-### Launcher placement
+### Cellphone toolbar button
 
-The floating cellphone button automatically positions itself to the right of Foundry's player list and before the macro hotbar when that space is available, reducing overlap as more users join the world.
+The cellphone no longer uses a floating launcher. An **Open Cellphone** button is added to Foundry's native Scene Controls tool palette on the left side of the canvas. The phone button is added to each control palette so it remains available regardless of which Scene Control layer is active, and it retains the cellphone unread badge when Foundry re-renders the toolbar.

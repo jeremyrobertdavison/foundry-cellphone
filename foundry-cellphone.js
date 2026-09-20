@@ -27,6 +27,7 @@ const STACK_IT_TICK_MS = 35;
 const BLOCK_DROP_WIDTH = 10;
 const BLOCK_DROP_HEIGHT = 20;
 const BLOCK_DROP_BASE_TICK_MS = 550;
+const PHONE_TOOL_NAME = `${MODULE_ID}-open-phone`;
 
 const state = {
   phoneOpen: false,
@@ -111,8 +112,6 @@ const state = {
   callTimerInterval: null,
   root: null,
   launcher: null,
-  launcherResizeObserver: null,
-  launcherPositionRaf: null,
   drag: null
 };
 
@@ -186,8 +185,15 @@ Hooks.once("init", () => {
   });
 });
 
+Hooks.on("getSceneControlButtons", (controls) => {
+  addCellphoneToolbarTool(controls);
+});
+
+Hooks.on("renderSceneControls", () => {
+  window.setTimeout(decorateCellphoneToolbarButton, 0);
+});
+
 Hooks.once("ready", () => {
-  buildLauncher();
   buildPhone();
   game.socket.on(SOCKET_NAME, onSocketMessage);
   state.typingSweepTimer = window.setInterval(pruneExpiredTyping, 750);
@@ -311,180 +317,73 @@ for (const hookName of ["createPlaylistSound", "updatePlaylistSound", "deletePla
   });
 }
 
-function buildLauncher() {
-  if (document.getElementById(`${MODULE_ID}-launcher`)) return;
-
-  const button = document.createElement("button");
-  button.id = `${MODULE_ID}-launcher`;
-  button.className = "fc-launcher";
-  button.type = "button";
-  button.title = "Open Cellphone";
-  button.setAttribute("aria-label", "Open Cellphone");
-  button.innerHTML = `
-    <i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i>
-    <span class="fc-launcher-badge" hidden>0</span>
-  `;
-  button.addEventListener("click", togglePhone);
-  document.body.appendChild(button);
-  state.launcher = button;
-  setupLauncherPositioning();
-}
-
-function getVisibleFoundryUiElement(selectors) {
-  for (const selector of selectors) {
-    const element = document.querySelector(selector);
-    if (!element) continue;
-    const rect = element.getBoundingClientRect();
-    const style = getComputedStyle(element);
-    if (style.display === "none" || style.visibility === "hidden" || rect.width < 1 || rect.height < 1) continue;
-    return element;
-  }
-  return null;
-}
-
-function getLauncherAnchorRect(element) {
-  if (!element) return null;
-
-  // Foundry v13 can place the visible player list inside a wider wrapper than
-  // the element matched by #players. Walk up through compact lower-left UI
-  // wrappers and use the widest sensible rectangle so the launcher clears the
-  // whole player panel instead of landing on top of its outer background.
-  const candidates = [];
-  let node = element;
-  for (let depth = 0; node && node !== document.body && depth < 7; depth += 1, node = node.parentElement) {
-    const rect = node.getBoundingClientRect?.();
-    if (!rect || rect.width < 1 || rect.height < 1) continue;
-    const style = getComputedStyle(node);
-    if (style.display === "none" || style.visibility === "hidden") continue;
-
-    const compactEnough = rect.width <= Math.min(420, window.innerWidth * 0.42)
-      && rect.height <= Math.min(520, window.innerHeight * 0.65);
-    const lowerLeft = rect.left <= Math.max(160, window.innerWidth * 0.2)
-      && rect.bottom >= window.innerHeight * 0.45;
-    if (compactEnough && lowerLeft) candidates.push(rect);
-  }
-
-  if (!candidates.length) return element.getBoundingClientRect();
-  return candidates.reduce((best, rect) => {
-    if (!best) return rect;
-    if (rect.right > best.right + 2) return rect;
-    if (Math.abs(rect.right - best.right) <= 2 && rect.width > best.width) return rect;
-    return best;
-  }, null);
-}
-
-function rectsOverlap(a, b, padding = 0) {
-  return !(
-    a.right + padding <= b.left
-    || a.left >= b.right + padding
-    || a.bottom + padding <= b.top
-    || a.top >= b.bottom + padding
-  );
-}
-
-function scheduleLauncherPosition() {
-  if (state.launcherPositionRaf) cancelAnimationFrame(state.launcherPositionRaf);
-  state.launcherPositionRaf = requestAnimationFrame(() => {
-    state.launcherPositionRaf = null;
-    positionLauncher();
+function addCellphoneToolbarTool(controls) {
+  const makeV13Tool = (order) => ({
+    name: PHONE_TOOL_NAME,
+    title: "Open Cellphone",
+    icon: "fa-solid fa-mobile-screen-button",
+    order,
+    button: true,
+    visible: true,
+    onChange: () => togglePhone()
   });
-}
 
-function positionLauncher() {
-  const launcher = state.launcher;
-  if (!launcher?.isConnected) return;
+  const makeV12Tool = () => ({
+    name: PHONE_TOOL_NAME,
+    title: "Open Cellphone",
+    icon: "fa-solid fa-mobile-screen-button",
+    visible: true,
+    toggle: false,
+    active: false,
+    button: true,
+    onClick: () => togglePhone()
+  });
 
-  // Foundry's player list normally lives at lower-left and the macro hotbar
-  // occupies the lower center. Put the phone button in the gap between them.
-  const players = getVisibleFoundryUiElement([
-    "#players",
-    "#players-active",
-    ".players-list"
-  ]);
-  const hotbar = getVisibleFoundryUiElement([
-    "#hotbar",
-    "#action-bar",
-    ".hotbar"
-  ]);
-
-  if (!players) {
-    // Keep the original CSS location as a safe fallback if Foundry changes its UI.
-    launcher.style.removeProperty("left");
-    launcher.style.removeProperty("right");
-    launcher.style.removeProperty("top");
-    launcher.style.removeProperty("bottom");
+  // Foundry v13+ exposes SceneControls as a record whose tools are also records.
+  if (!Array.isArray(controls)) {
+    for (const control of Object.values(controls ?? {})) {
+      if (!control?.tools || typeof control.tools !== "object" || Array.isArray(control.tools)) continue;
+      if (control.tools[PHONE_TOOL_NAME]) continue;
+      const orders = Object.values(control.tools).map((tool) => Number(tool?.order ?? 0)).filter(Number.isFinite);
+      const order = (orders.length ? Math.max(...orders) : 0) + 10;
+      control.tools[PHONE_TOOL_NAME] = makeV13Tool(order);
+    }
     return;
   }
 
-  const rawPlayerRect = players.getBoundingClientRect();
-  const playerRect = getLauncherAnchorRect(players) || rawPlayerRect;
-  const launcherWidth = launcher.offsetWidth || 46;
-  const launcherHeight = launcher.offsetHeight || 46;
-  const edge = 10;
-  const gap = 12;
-
-  let left = playerRect.right + gap;
-  let top = Math.max(edge, Math.min(window.innerHeight - launcherHeight - edge, playerRect.bottom - launcherHeight));
-
-  if (hotbar) {
-    const hotbarRect = hotbar.getBoundingClientRect();
-    const maximumLeftBeforeHotbar = hotbarRect.left - launcherWidth - gap;
-
-    if (maximumLeftBeforeHotbar >= left) {
-      // There is a clean horizontal gap: put the phone between the complete
-      // player panel and the macro hotbar.
-      top = hotbarRect.top + ((hotbarRect.height - launcherHeight) / 2);
-    } else {
-      // Narrow-window fallback. Stay fully clear of the player panel, then move
-      // just above the hotbar if there is not enough horizontal room.
-      top = hotbarRect.top - launcherHeight - gap;
-    }
-
-    // Final collision guard. Some Foundry themes add padding/backgrounds outside
-    // the element matched by #players; if our first candidate still intersects
-    // either UI region, push it completely clear before clamping to the viewport.
-    let launcherRect = {
-      left,
-      top,
-      right: left + launcherWidth,
-      bottom: top + launcherHeight
-    };
-    if (rectsOverlap(launcherRect, playerRect, 2)) {
-      left = playerRect.right + gap;
-      launcherRect = { left, top, right: left + launcherWidth, bottom: top + launcherHeight };
-    }
-    if (rectsOverlap(launcherRect, hotbarRect, 2)) {
-      top = hotbarRect.top - launcherHeight - gap;
-    }
+  // Foundry v12 exposes SceneControls and their tools as arrays.
+  for (const control of controls) {
+    if (!Array.isArray(control?.tools)) continue;
+    if (control.tools.some((tool) => tool?.name === PHONE_TOOL_NAME)) continue;
+    control.tools.push(makeV12Tool());
   }
-
-  left = Math.max(edge, Math.min(window.innerWidth - launcherWidth - edge, left));
-  top = Math.max(edge, Math.min(window.innerHeight - launcherHeight - edge, top));
-
-  launcher.style.left = `${Math.round(left)}px`;
-  launcher.style.top = `${Math.round(top)}px`;
-  launcher.style.right = "auto";
-  launcher.style.bottom = "auto";
 }
 
-function setupLauncherPositioning() {
-  scheduleLauncherPosition();
-  window.addEventListener("resize", scheduleLauncherPosition, { passive: true });
-
-  state.launcherResizeObserver?.disconnect?.();
-  if (typeof ResizeObserver !== "undefined") {
-    state.launcherResizeObserver = new ResizeObserver(scheduleLauncherPosition);
-    const players = getVisibleFoundryUiElement(["#players", "#players-active", ".players-list"]);
-    const hotbar = getVisibleFoundryUiElement(["#hotbar", "#action-bar", ".hotbar"]);
-    if (players) state.launcherResizeObserver.observe(players);
-    if (hotbar) state.launcherResizeObserver.observe(hotbar);
+function decorateCellphoneToolbarButton() {
+  const selector = `[data-tool="${PHONE_TOOL_NAME}"], [data-control="${PHONE_TOOL_NAME}"]`;
+  const buttons = [...document.querySelectorAll(selector)];
+  if (!buttons.length) {
+    state.launcher = null;
+    return;
   }
 
-  // Re-check after Foundry renders or refreshes either area. Hook names differ
-  // slightly across supported Foundry generations, so listening to both is safe.
-  Hooks.on("renderPlayerList", scheduleLauncherPosition);
-  Hooks.on("renderPlayers", scheduleLauncherPosition);
-  Hooks.on("renderHotbar", scheduleLauncherPosition);
+  // Only one SceneControl palette is normally visible, but decorate every matching
+  // element so the badge survives Foundry changing the active control layer.
+  for (const button of buttons) {
+    button.classList.add("fc-toolbar-phone-button");
+    button.title = "Open Cellphone";
+    button.setAttribute("aria-label", "Open Cellphone");
+    if (!button.querySelector(".fc-launcher-badge")) {
+      const badge = document.createElement("span");
+      badge.className = "fc-launcher-badge";
+      badge.hidden = true;
+      badge.textContent = "0";
+      button.appendChild(badge);
+    }
+  }
+
+  state.launcher = buttons.find((button) => button.offsetParent !== null) || buttons[0];
+  updateBadges();
 }
 
 function buildPhone() {
@@ -9030,7 +8929,8 @@ function updateBadges() {
   const missionUnread = getMissionUnreadCount();
   const total = messageUnread + missionUnread;
 
-  setBadge(state.launcher?.querySelector(".fc-launcher-badge"), total);
+  const toolbarBadges = document.querySelectorAll(`.fc-toolbar-phone-button .fc-launcher-badge`);
+  for (const badge of toolbarBadges) setBadge(badge, total);
   if (!state.root) return;
   setBadge(state.root.querySelector(".fc-group-tab-badge"), groupUnread);
   setBadge(state.root.querySelector(".fc-dm-tab-badge"), dmUnread);
