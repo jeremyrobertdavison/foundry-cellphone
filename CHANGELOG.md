@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.2
+
+- Fixed the cellphone launcher still overlapping the visible Foundry player-list panel on some v13 layouts/themes.
+- Launcher positioning now detects the player list's compact outer wrapper instead of relying only on the inner `#players` rectangle.
+- Added final collision checks against both the full player panel and macro hotbar before placing the launcher.
+- Existing phone apps and data are unchanged.
+
 ## 2.4.1
 
 - Repositioned the floating cellphone launcher so it sits to the right of Foundry's player list instead of above it.

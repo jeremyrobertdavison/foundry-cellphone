@@ -342,6 +342,46 @@ function getVisibleFoundryUiElement(selectors) {
   return null;
 }
 
+function getLauncherAnchorRect(element) {
+  if (!element) return null;
+
+  // Foundry v13 can place the visible player list inside a wider wrapper than
+  // the element matched by #players. Walk up through compact lower-left UI
+  // wrappers and use the widest sensible rectangle so the launcher clears the
+  // whole player panel instead of landing on top of its outer background.
+  const candidates = [];
+  let node = element;
+  for (let depth = 0; node && node !== document.body && depth < 7; depth += 1, node = node.parentElement) {
+    const rect = node.getBoundingClientRect?.();
+    if (!rect || rect.width < 1 || rect.height < 1) continue;
+    const style = getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") continue;
+
+    const compactEnough = rect.width <= Math.min(420, window.innerWidth * 0.42)
+      && rect.height <= Math.min(520, window.innerHeight * 0.65);
+    const lowerLeft = rect.left <= Math.max(160, window.innerWidth * 0.2)
+      && rect.bottom >= window.innerHeight * 0.45;
+    if (compactEnough && lowerLeft) candidates.push(rect);
+  }
+
+  if (!candidates.length) return element.getBoundingClientRect();
+  return candidates.reduce((best, rect) => {
+    if (!best) return rect;
+    if (rect.right > best.right + 2) return rect;
+    if (Math.abs(rect.right - best.right) <= 2 && rect.width > best.width) return rect;
+    return best;
+  }, null);
+}
+
+function rectsOverlap(a, b, padding = 0) {
+  return !(
+    a.right + padding <= b.left
+    || a.left >= b.right + padding
+    || a.bottom + padding <= b.top
+    || a.top >= b.bottom + padding
+  );
+}
+
 function scheduleLauncherPosition() {
   if (state.launcherPositionRaf) cancelAnimationFrame(state.launcherPositionRaf);
   state.launcherPositionRaf = requestAnimationFrame(() => {
@@ -376,7 +416,8 @@ function positionLauncher() {
     return;
   }
 
-  const playerRect = players.getBoundingClientRect();
+  const rawPlayerRect = players.getBoundingClientRect();
+  const playerRect = getLauncherAnchorRect(players) || rawPlayerRect;
   const launcherWidth = launcher.offsetWidth || 46;
   const launcherHeight = launcher.offsetHeight || 46;
   const edge = 10;
@@ -390,12 +431,29 @@ function positionLauncher() {
     const maximumLeftBeforeHotbar = hotbarRect.left - launcherWidth - gap;
 
     if (maximumLeftBeforeHotbar >= left) {
-      // There is a clean horizontal gap: center the button vertically on the hotbar.
-      left = Math.min(left, maximumLeftBeforeHotbar);
+      // There is a clean horizontal gap: put the phone between the complete
+      // player panel and the macro hotbar.
       top = hotbarRect.top + ((hotbarRect.height - launcherHeight) / 2);
     } else {
-      // Narrow window fallback: stay right of the player list and sit just above
-      // the hotbar rather than covering either control.
+      // Narrow-window fallback. Stay fully clear of the player panel, then move
+      // just above the hotbar if there is not enough horizontal room.
+      top = hotbarRect.top - launcherHeight - gap;
+    }
+
+    // Final collision guard. Some Foundry themes add padding/backgrounds outside
+    // the element matched by #players; if our first candidate still intersects
+    // either UI region, push it completely clear before clamping to the viewport.
+    let launcherRect = {
+      left,
+      top,
+      right: left + launcherWidth,
+      bottom: top + launcherHeight
+    };
+    if (rectsOverlap(launcherRect, playerRect, 2)) {
+      left = playerRect.right + gap;
+      launcherRect = { left, top, right: left + launcherWidth, bottom: top + launcherHeight };
+    }
+    if (rectsOverlap(launcherRect, hotbarRect, 2)) {
       top = hotbarRect.top - launcherHeight - gap;
     }
   }
