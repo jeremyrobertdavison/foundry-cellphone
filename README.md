@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **2.4.0** expands day-to-day phone controls with message deletion, Friendpage comment reactions, and personal Music + Environment volume controls.
+Version **2.5.0** adds a dedicated Settings app with personal cellphone resizing, giving each player control over how large the phone appears on their own Foundry client.
 
 ## Cellphone apps
 
@@ -16,6 +16,7 @@ Version **2.4.0** expands day-to-day phone controls with message deletion, Frien
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
 - **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
 - **Music** — streaming-style now-playing view with client-only personal Music and Environment volume controls.
+- **Settings** — personal cellphone preferences, beginning with per-user phone resizing from 60% to 150%.
 
 ## Messages
 
@@ -97,6 +98,10 @@ Snake, Runner, Stack It, and Block Drop automatically pause when appropriate, in
 The Music app provides a generic streaming-player presentation for Foundry's native Playlist system. It shows the currently playing track and playlist, displays additional simultaneously playing tracks when present, and updates when Foundry playlist playback changes.
 
 The **Your Music Volume** slider controls Foundry's client-side global Playlist volume setting. The **Your Environment Volume** slider controls Foundry's client-side Ambient volume setting for Scene environmental sounds. Both controls affect only the current user's listening level and include mute/restore buttons. Playback remains under normal Foundry/GM control; the app does not add player skip, pause, or track-selection permissions.
+
+## Settings
+
+The **Settings** app contains personal cellphone preferences that are stored per Foundry client. The initial setting is **Phone Size**, with a 60%–150% slider and Small, Default, Large, and XL presets. Resizing updates the phone immediately and does not affect any other user. Oversized values are automatically constrained to the available browser window.
 
 ## Foundry compatibility
 

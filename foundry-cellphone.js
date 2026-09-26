@@ -11,6 +11,7 @@ const FRIENDPAGE_PROFILES_SETTING = "friendpageProfiles";
 const BROWSER_BOOKMARKS_SETTING = "browserBookmarks";
 const ARCADE_STATS_SETTING = "arcadeStats";
 const MONDO_RIDES_SETTING = "mondoRidesScenes";
+const PHONE_SCALE_SETTING = "phoneScalePercent";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -182,6 +183,19 @@ Hooks.once("init", () => {
     type: Array,
     default: [],
     onChange: () => refreshAll()
+  });
+
+  game.settings.register(MODULE_ID, PHONE_SCALE_SETTING, {
+    name: "Cellphone Size",
+    hint: "Personal cellphone size percentage for this Foundry client.",
+    scope: "client",
+    config: false,
+    type: Number,
+    default: 100,
+    onChange: () => {
+      applyPhoneScale();
+      if (state.phoneOpen && state.app === "settings") renderSettingsView();
+    }
   });
 });
 
@@ -454,6 +468,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-music"><i class="fa-solid fa-headphones"></i></span>
               <span class="fc-app-label">Music</span>
             </button>
+            <button class="fc-app-icon fc-app-icon-settings" type="button" data-app="settings">
+              <span class="fc-app-symbol fc-app-symbol-settings"><i class="fa-solid fa-gear"></i></span>
+              <span class="fc-app-label">Settings</span>
+            </button>
           </div>
         </section>
 
@@ -555,6 +573,10 @@ function buildPhone() {
           <section class="fc-music-view" hidden>
             <div class="fc-music-content"></div>
           </section>
+
+          <section class="fc-settings-view" hidden>
+            <div class="fc-settings-content"></div>
+          </section>
         </main>
       </div>
 
@@ -565,6 +587,7 @@ function buildPhone() {
 
   document.body.appendChild(root);
   state.root = root;
+  applyPhoneScale();
 
   root.querySelector(".fc-close").addEventListener("click", closePhone);
   root.querySelector(".fc-home-close").addEventListener("click", closePhone);
@@ -600,7 +623,7 @@ function buildPhone() {
   });
 
   setupPhoneDragging(root.querySelector(".fc-phone"), root.querySelector(".fc-drag-handle"));
-  window.addEventListener("resize", keepPhoneOnScreen);
+  window.addEventListener("resize", () => { applyPhoneScale(); keepPhoneOnScreen(); });
   window.addEventListener("keydown", onArcadeKeydown);
 }
 
@@ -623,7 +646,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo', 'music'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo', 'music', 'settings'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -736,6 +759,11 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "settings") {
+    goHome();
+    return;
+  }
 
   if (state.app === "music") {
     goHome();
@@ -1207,6 +1235,7 @@ function renderPhone() {
   const mapsView = state.root.querySelector(".fc-maps-view");
   const mondoView = state.root.querySelector(".fc-mondo-view");
   const musicView = state.root.querySelector(".fc-music-view");
+  const settingsView = state.root.querySelector(".fc-settings-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
 
@@ -1226,6 +1255,7 @@ function renderPhone() {
   mapsView.hidden = true;
   mondoView.hidden = true;
   musicView.hidden = true;
+  settingsView.hidden = true;
 
   if (inCallUi) {
     renderCallScreen();
@@ -1301,6 +1331,13 @@ function renderPhone() {
     return;
   }
 
+  if (state.app === "settings") {
+    settingsView.hidden = false;
+    renderSettingsView();
+    updateBadges();
+    return;
+  }
+
   if (state.app === "mondo") {
     mondoView.hidden = false;
     renderMondoRidesView();
@@ -1358,6 +1395,13 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "settings") {
+    back.hidden = false;
+    title.textContent = "Settings";
+    subtitle.textContent = "Personal phone preferences";
+    return;
+  }
 
   if (state.app === "music") {
     back.hidden = false;
@@ -8965,6 +9009,130 @@ function autoSizeTextarea(textarea) {
   if (!textarea) return;
   textarea.style.height = "auto";
   textarea.style.height = `${Math.min(textarea.scrollHeight, 90)}px`;
+}
+
+function getPhoneScalePercent() {
+  const raw = Number(game.settings?.get?.(MODULE_ID, PHONE_SCALE_SETTING) ?? 100);
+  if (!Number.isFinite(raw)) return 100;
+  return Math.min(150, Math.max(60, Math.round(raw)));
+}
+
+function getBasePhoneHeight() {
+  const viewportHeight = Math.max(320, window.innerHeight || 800);
+  const viewportWidth = Math.max(320, window.innerWidth || 1280);
+  if (viewportWidth <= 720) return Math.min(viewportHeight * 0.82, 600);
+  if (viewportHeight <= 720) return Math.min(viewportHeight * 0.88, 580);
+  return Math.min(viewportHeight * 0.76, 650);
+}
+
+function getEffectivePhoneHeight(scalePercent = getPhoneScalePercent()) {
+  const requested = getBasePhoneHeight() * (scalePercent / 100);
+  const maxHeight = Math.max(300, (window.innerHeight || 800) * 0.94);
+  const maxByWidth = Math.max(300, (window.innerWidth || 1280) * 0.94 * (337 / 171));
+  return Math.round(Math.max(300, Math.min(requested, maxHeight, maxByWidth)));
+}
+
+function applyPhoneScale(previewPercent = null) {
+  const phone = state.root?.querySelector(".fc-phone");
+  if (!phone) return;
+  const percent = previewPercent == null ? getPhoneScalePercent() : Math.min(150, Math.max(60, Number(previewPercent) || 100));
+  phone.style.height = `${getEffectivePhoneHeight(percent)}px`;
+  requestAnimationFrame(keepPhoneOnScreen);
+}
+
+async function setPhoneScalePercent(value) {
+  const percent = Math.min(150, Math.max(60, Math.round(Number(value) || 100)));
+  await game.settings.set(MODULE_ID, PHONE_SCALE_SETTING, percent);
+}
+
+function renderSettingsView() {
+  const container = state.root?.querySelector(".fc-settings-content");
+  if (!container) return;
+  container.replaceChildren();
+
+  const shell = document.createElement("div");
+  shell.className = "fc-settings-shell";
+
+  const intro = document.createElement("div");
+  intro.className = "fc-settings-intro";
+  intro.innerHTML = '<i class="fa-solid fa-sliders"></i><div><strong>Phone appearance</strong><span>These settings apply only to your Foundry client.</span></div>';
+  shell.appendChild(intro);
+
+  const card = document.createElement("section");
+  card.className = "fc-settings-card";
+
+  const heading = document.createElement("div");
+  heading.className = "fc-settings-heading";
+  const headingText = document.createElement("div");
+  headingText.innerHTML = '<strong>Phone size</strong><span>Resize the entire cellphone interface.</span>';
+  const value = document.createElement("strong");
+  value.className = "fc-settings-value";
+  const current = getPhoneScalePercent();
+  value.textContent = `${current}%`;
+  heading.append(headingText, value);
+  card.appendChild(heading);
+
+  const range = document.createElement("input");
+  range.className = "fc-settings-range";
+  range.type = "range";
+  range.min = "60";
+  range.max = "150";
+  range.step = "5";
+  range.value = String(current);
+  range.setAttribute("aria-label", "Phone size percentage");
+  range.addEventListener("input", () => {
+    const percent = Number(range.value);
+    value.textContent = `${percent}%`;
+    applyPhoneScale(percent);
+  });
+  range.addEventListener("change", async () => {
+    range.disabled = true;
+    try {
+      await setPhoneScalePercent(range.value);
+    } catch (error) {
+      console.error(`${MODULE_ID} | Failed to save phone size`, error);
+      ui.notifications.error("Cellphone size could not be saved.");
+      applyPhoneScale();
+    } finally {
+      range.disabled = false;
+    }
+  });
+  card.appendChild(range);
+
+  const scaleLabels = document.createElement("div");
+  scaleLabels.className = "fc-settings-range-labels";
+  scaleLabels.innerHTML = '<span>Smaller</span><span>Default</span><span>Larger</span>';
+  card.appendChild(scaleLabels);
+
+  const presets = document.createElement("div");
+  presets.className = "fc-settings-presets";
+  for (const [percent, label] of [[75, "Small"], [100, "Default"], [125, "Large"], [150, "XL"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.className = percent === current ? "is-active" : "";
+    button.addEventListener("click", async () => {
+      range.value = String(percent);
+      value.textContent = `${percent}%`;
+      applyPhoneScale(percent);
+      try {
+        await setPhoneScalePercent(percent);
+      } catch (error) {
+        console.error(`${MODULE_ID} | Failed to save phone size preset`, error);
+        ui.notifications.error("Cellphone size could not be saved.");
+      }
+    });
+    presets.appendChild(button);
+  }
+  card.appendChild(presets);
+
+  const note = document.createElement("div");
+  note.className = "fc-settings-note";
+  note.innerHTML = '<i class="fa-solid fa-circle-info"></i><span>Very large sizes are automatically limited when needed so the phone remains on screen.</span>';
+  card.appendChild(note);
+
+  shell.appendChild(card);
+  container.appendChild(shell);
 }
 
 function setupPhoneDragging(phone, handle) {

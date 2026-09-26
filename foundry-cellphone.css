@@ -5185,3 +5185,164 @@
   opacity: .42;
   cursor: default;
 }
+
+
+/* v2.5.0 Settings app */
+.fc-home-screen {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.14) transparent;
+}
+
+.fc-app-icon-settings {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: 90px;
+}
+
+.fc-app-symbol-settings {
+  background: linear-gradient(145deg, #697482, #343b46);
+  border: 1px solid rgba(255,255,255,.16);
+}
+
+.fc-settings-view[hidden] { display: none !important; }
+.fc-settings-view {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.18) transparent;
+}
+
+.fc-settings-content,
+.fc-settings-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fc-settings-intro {
+  display: grid;
+  grid-template-columns: 34px minmax(0,1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.07);
+}
+
+.fc-settings-intro > i {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #697482, #343b46);
+  color: #fff;
+}
+
+.fc-settings-intro > div,
+.fc-settings-heading > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fc-settings-intro strong,
+.fc-settings-heading strong {
+  color: #fff;
+  font-size: 11px;
+}
+
+.fc-settings-intro span,
+.fc-settings-heading span {
+  color: rgba(255,255,255,.48);
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.fc-settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.07);
+}
+
+.fc-settings-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.fc-settings-value {
+  flex: 0 0 auto;
+  color: #fff;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-settings-range {
+  width: 100%;
+  margin: 2px 0 0;
+  accent-color: #758394;
+  cursor: pointer;
+}
+
+.fc-settings-range-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: -6px;
+  color: rgba(255,255,255,.36);
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.fc-settings-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 5px;
+}
+
+.fc-settings-presets button {
+  min-width: 0;
+  min-height: 30px;
+  margin: 0;
+  padding: 5px 3px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 8px;
+  background: rgba(255,255,255,.05);
+  color: rgba(255,255,255,.68);
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.fc-settings-presets button.is-active {
+  border-color: rgba(173,190,210,.42);
+  background: rgba(124,140,158,.28);
+  color: #fff;
+}
+
+.fc-settings-note {
+  display: grid;
+  grid-template-columns: 16px minmax(0,1fr);
+  gap: 6px;
+  align-items: start;
+  padding-top: 2px;
+  color: rgba(255,255,255,.42);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.fc-settings-note i {
+  margin-top: 1px;
+  color: rgba(194,207,222,.62);
+}

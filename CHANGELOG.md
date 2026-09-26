@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.5.0
+
+- Added a new **Settings** app to the cellphone Home Screen.
+- Added a personal **Phone Size** control that resizes the entire cellphone interface from 60% to 150%.
+- Added Small, Default, Large, and XL size presets alongside the fine-grained slider.
+- Phone size is stored as a client setting, so each Foundry user can choose their own size without affecting anyone else.
+- Very large phone sizes are automatically constrained by the current browser window so the cellphone remains accessible.
+- Phone sizing updates live while the slider moves and continues to respect the existing draggable cellphone behavior.
+- Made the Home Screen vertically scrollable so the growing app library remains usable on smaller displays.
+- Existing cellphone apps and stored campaign data are unchanged.
+
 ## 2.4.3
 
 - Removed the floating cellphone launcher entirely, eliminating overlap with Foundry's player list and macro hotbar.
