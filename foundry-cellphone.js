@@ -12,6 +12,8 @@ const BROWSER_BOOKMARKS_SETTING = "browserBookmarks";
 const ARCADE_STATS_SETTING = "arcadeStats";
 const MONDO_RIDES_SETTING = "mondoRidesScenes";
 const PHONE_SCALE_SETTING = "phoneScalePercent";
+const PHONE_TEXT_SCALE_SETTING = "phoneTextScalePercent";
+const PHONE_TEXT_FOLLOW_SIZE_SETTING = "phoneTextFollowsSize";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -192,6 +194,32 @@ Hooks.once("init", () => {
     config: false,
     type: Number,
     default: 100,
+    onChange: () => {
+      applyPhoneScale();
+      if (state.phoneOpen && state.app === "settings") renderSettingsView();
+    }
+  });
+
+  game.settings.register(MODULE_ID, PHONE_TEXT_SCALE_SETTING, {
+    name: "Cellphone Text Size",
+    hint: "Personal cellphone text size percentage for this Foundry client when text size is not following phone size.",
+    scope: "client",
+    config: false,
+    type: Number,
+    default: 100,
+    onChange: () => {
+      applyPhoneScale();
+      if (state.phoneOpen && state.app === "settings") renderSettingsView();
+    }
+  });
+
+  game.settings.register(MODULE_ID, PHONE_TEXT_FOLLOW_SIZE_SETTING, {
+    name: "Cellphone Text Follows Phone Size",
+    hint: "When enabled, cellphone text scales automatically with the phone size setting.",
+    scope: "client",
+    config: false,
+    type: Boolean,
+    default: true,
     onChange: () => {
       applyPhoneScale();
       if (state.phoneOpen && state.app === "settings") renderSettingsView();
@@ -9017,6 +9045,16 @@ function getPhoneScalePercent() {
   return Math.min(150, Math.max(60, Math.round(raw)));
 }
 
+function getPhoneTextScalePercent() {
+  const raw = Number(game.settings?.get?.(MODULE_ID, PHONE_TEXT_SCALE_SETTING) ?? 100);
+  if (!Number.isFinite(raw)) return 100;
+  return Math.min(150, Math.max(60, Math.round(raw)));
+}
+
+function getPhoneTextFollowsSize() {
+  return game.settings?.get?.(MODULE_ID, PHONE_TEXT_FOLLOW_SIZE_SETTING) !== false;
+}
+
 function getBasePhoneHeight() {
   const viewportHeight = Math.max(320, window.innerHeight || 800);
   const viewportWidth = Math.max(320, window.innerWidth || 1280);
@@ -9032,17 +9070,42 @@ function getEffectivePhoneHeight(scalePercent = getPhoneScalePercent()) {
   return Math.round(Math.max(300, Math.min(requested, maxHeight, maxByWidth)));
 }
 
-function applyPhoneScale(previewPercent = null) {
+function clampPhonePercent(value, fallback = 100) {
+  const numeric = Number(value);
+  return Math.min(150, Math.max(60, Number.isFinite(numeric) ? numeric : fallback));
+}
+
+function applyPhoneScale(previewPercent = null, previewTextPercent = null, followSizeOverride = null) {
   const phone = state.root?.querySelector(".fc-phone");
   if (!phone) return;
-  const percent = previewPercent == null ? getPhoneScalePercent() : Math.min(150, Math.max(60, Number(previewPercent) || 100));
-  phone.style.height = `${getEffectivePhoneHeight(percent)}px`;
+
+  const phonePercent = previewPercent == null
+    ? getPhoneScalePercent()
+    : clampPhonePercent(previewPercent);
+  const followsPhoneSize = followSizeOverride == null
+    ? getPhoneTextFollowsSize()
+    : Boolean(followSizeOverride);
+  const textPercent = followsPhoneSize
+    ? phonePercent
+    : (previewTextPercent == null ? getPhoneTextScalePercent() : clampPhonePercent(previewTextPercent));
+
+  phone.style.height = `${getEffectivePhoneHeight(phonePercent)}px`;
+  phone.style.setProperty("--fc-font-scale", String(textPercent / 100));
   requestAnimationFrame(keepPhoneOnScreen);
 }
 
 async function setPhoneScalePercent(value) {
-  const percent = Math.min(150, Math.max(60, Math.round(Number(value) || 100)));
+  const percent = Math.round(clampPhonePercent(value));
   await game.settings.set(MODULE_ID, PHONE_SCALE_SETTING, percent);
+}
+
+async function setPhoneTextScalePercent(value) {
+  const percent = Math.round(clampPhonePercent(value));
+  await game.settings.set(MODULE_ID, PHONE_TEXT_SCALE_SETTING, percent);
+}
+
+async function setPhoneTextFollowsSize(value) {
+  await game.settings.set(MODULE_ID, PHONE_TEXT_FOLLOW_SIZE_SETTING, Boolean(value));
 }
 
 function renderSettingsView() {
@@ -9084,6 +9147,7 @@ function renderSettingsView() {
     const percent = Number(range.value);
     value.textContent = `${percent}%`;
     applyPhoneScale(percent);
+    updateTextControlsForPhonePreview(percent);
   });
   range.addEventListener("change", async () => {
     range.disabled = true;
@@ -9115,6 +9179,7 @@ function renderSettingsView() {
       range.value = String(percent);
       value.textContent = `${percent}%`;
       applyPhoneScale(percent);
+      updateTextControlsForPhonePreview(percent);
       try {
         await setPhoneScalePercent(percent);
       } catch (error) {
@@ -9132,6 +9197,130 @@ function renderSettingsView() {
   card.appendChild(note);
 
   shell.appendChild(card);
+
+  const textCard = document.createElement("section");
+  textCard.className = "fc-settings-card";
+
+  const textHeading = document.createElement("div");
+  textHeading.className = "fc-settings-heading";
+  const textHeadingText = document.createElement("div");
+  textHeadingText.innerHTML = '<strong>Text size</strong><span>Scale cellphone text with the phone or adjust it independently.</span>';
+  const textValue = document.createElement("strong");
+  textValue.className = "fc-settings-value";
+  const textCurrent = getPhoneTextScalePercent();
+  const followsPhoneSize = getPhoneTextFollowsSize();
+  textValue.textContent = `${followsPhoneSize ? current : textCurrent}%`;
+  textHeading.append(textHeadingText, textValue);
+  textCard.appendChild(textHeading);
+
+  const followRow = document.createElement("label");
+  followRow.className = "fc-settings-toggle-row";
+  const followCopy = document.createElement("span");
+  followCopy.innerHTML = '<strong>Follow phone size</strong><small>Keep text proportional when the phone is resized.</small>';
+  const followToggle = document.createElement("input");
+  followToggle.type = "checkbox";
+  followToggle.checked = followsPhoneSize;
+  followToggle.setAttribute("aria-label", "Make text size follow phone size");
+  followRow.append(followCopy, followToggle);
+  textCard.appendChild(followRow);
+
+  const textRange = document.createElement("input");
+  textRange.className = "fc-settings-range";
+  textRange.type = "range";
+  textRange.min = "60";
+  textRange.max = "150";
+  textRange.step = "5";
+  textRange.value = String(followsPhoneSize ? current : textCurrent);
+  textRange.disabled = followsPhoneSize;
+  textRange.setAttribute("aria-label", "Text size percentage");
+  textRange.addEventListener("input", () => {
+    const percent = Number(textRange.value);
+    textValue.textContent = `${percent}%`;
+    applyPhoneScale(null, percent, false);
+    updateTextPresetState(percent);
+  });
+  textRange.addEventListener("change", async () => {
+    textRange.disabled = true;
+    try {
+      await setPhoneTextScalePercent(textRange.value);
+    } catch (error) {
+      console.error(`${MODULE_ID} | Failed to save text size`, error);
+      ui.notifications.error("Cellphone text size could not be saved.");
+      applyPhoneScale();
+    } finally {
+      textRange.disabled = getPhoneTextFollowsSize();
+    }
+  });
+  textCard.appendChild(textRange);
+
+  const textScaleLabels = document.createElement("div");
+  textScaleLabels.className = "fc-settings-range-labels";
+  textScaleLabels.innerHTML = '<span>Smaller</span><span>Default</span><span>Larger</span>';
+  textCard.appendChild(textScaleLabels);
+
+  const textPresets = document.createElement("div");
+  textPresets.className = "fc-settings-presets fc-settings-text-presets";
+  const textPresetButtons = [];
+  for (const [percent, label] of [[75, "Small"], [100, "Default"], [125, "Large"], [150, "XL"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.disabled = followsPhoneSize;
+    button.className = (!followsPhoneSize && percent === textCurrent) ? "is-active" : "";
+    button.addEventListener("click", async () => {
+      textRange.value = String(percent);
+      textValue.textContent = `${percent}%`;
+      applyPhoneScale(null, percent, false);
+      updateTextPresetState(percent);
+      try {
+        await setPhoneTextScalePercent(percent);
+      } catch (error) {
+        console.error(`${MODULE_ID} | Failed to save text size preset`, error);
+        ui.notifications.error("Cellphone text size could not be saved.");
+      }
+    });
+    textPresetButtons.push([percent, button]);
+    textPresets.appendChild(button);
+  }
+  textCard.appendChild(textPresets);
+
+  function updateTextPresetState(percent) {
+    for (const [presetPercent, button] of textPresetButtons) {
+      button.classList.toggle("is-active", !followToggle.checked && presetPercent === Number(percent));
+    }
+  }
+
+  function updateTextControlsForPhonePreview(phonePercent) {
+    if (!followToggle.checked) return;
+    textValue.textContent = `${Math.round(Number(phonePercent) || 100)}%`;
+    textRange.value = String(Math.round(clampPhonePercent(phonePercent)));
+  }
+
+  followToggle.addEventListener("change", async () => {
+    followToggle.disabled = true;
+    try {
+      if (followToggle.checked) {
+        await setPhoneTextFollowsSize(true);
+      } else {
+        const currentPhonePercent = Number(range.value) || getPhoneScalePercent();
+        await setPhoneTextScalePercent(currentPhonePercent);
+        await setPhoneTextFollowsSize(false);
+      }
+    } catch (error) {
+      console.error(`${MODULE_ID} | Failed to save text follow setting`, error);
+      ui.notifications.error("Cellphone text settings could not be saved.");
+      applyPhoneScale();
+    } finally {
+      followToggle.disabled = false;
+    }
+  });
+
+  const textNote = document.createElement("div");
+  textNote.className = "fc-settings-note";
+  textNote.innerHTML = '<i class="fa-solid fa-universal-access"></i><span>Turn off Follow phone size if you want larger or smaller text without changing the phone itself.</span>';
+  textCard.appendChild(textNote);
+
+  shell.appendChild(textCard);
   container.appendChild(shell);
 }
 

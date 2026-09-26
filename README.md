@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **2.5.0** adds a dedicated Settings app with personal cellphone resizing, giving each player control over how large the phone appears on their own Foundry client.
+Version **2.6.0** expands the Settings app so cellphone text scales with phone size by default, while each player can optionally choose an independent text size for readability.
 
 ## Cellphone apps
 
@@ -16,7 +16,7 @@ Version **2.5.0** adds a dedicated Settings app with personal cellphone resizing
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
 - **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
 - **Music** — streaming-style now-playing view with client-only personal Music and Environment volume controls.
-- **Settings** — personal cellphone preferences, beginning with per-user phone resizing from 60% to 150%.
+- **Settings** — per-user phone resizing from 60% to 150%, automatic proportional text scaling, and an optional independent text-size control.
 
 ## Messages
 
@@ -101,7 +101,7 @@ The **Your Music Volume** slider controls Foundry's client-side global Playlist 
 
 ## Settings
 
-The **Settings** app contains personal cellphone preferences that are stored per Foundry client. The initial setting is **Phone Size**, with a 60%–150% slider and Small, Default, Large, and XL presets. Resizing updates the phone immediately and does not affect any other user. Oversized values are automatically constrained to the available browser window.
+The **Settings** app contains personal cellphone preferences that are stored per Foundry client. **Phone Size** uses a 60%–150% slider with Small, Default, Large, and XL presets. By default, **Follow phone size** is enabled, so enlarging or shrinking the phone also scales cellphone typography proportionally. Players may disable that option and use the separate **Text Size** control, also from 60% to 150%, to make text larger or smaller without changing the physical phone size. Changes preview immediately and affect only the current user's Foundry client. Oversized phone values are automatically constrained to the available browser window.
 
 ## Foundry compatibility
 

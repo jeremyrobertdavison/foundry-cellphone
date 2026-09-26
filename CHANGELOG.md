@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.0
+
+- Phone resizing now scales cellphone font sizes proportionally by default.
+- Added a per-client **Text size** setting from 60% to 150%.
+- Added **Follow phone size**, enabled by default, so existing users automatically get proportional text scaling without extra setup.
+- Players can disable Follow phone size to enlarge or reduce text independently of the physical phone size.
+- Text-size changes preview immediately in the Settings app and remain private to the current Foundry client.
+
 ## 2.5.0
 
 - Added a new **Settings** app to the cellphone Home Screen.
