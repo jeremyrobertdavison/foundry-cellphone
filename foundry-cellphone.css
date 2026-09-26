@@ -3440,6 +3440,7 @@
 /* v1.8.0 Arcade expansion */
 .fc-arcade-game-icon-mines { background: linear-gradient(145deg, #555d69, #242a31); }
 .fc-arcade-game-icon-runner { background: linear-gradient(145deg, #e39a37, #9d5c16); }
+.fc-arcade-game-icon-faceflap { background: linear-gradient(145deg, #5ec9d8, #2a7f98); }
 .fc-arcade-game-icon-guess { background: linear-gradient(145deg, #9a62df, #5b3298); }
 .fc-arcade-game-icon-stack { background: linear-gradient(145deg, #35b9c7, #227487); }
 
@@ -5392,3 +5393,80 @@
   opacity: .45;
   cursor: not-allowed;
 }
+
+.fc-faceflap-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fc-faceflap-board {
+  position: relative;
+  width: 220px;
+  height: 300px;
+  align-self: center;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.16);
+  background: linear-gradient(180deg, #74c8ee 0%, #8fe0f6 68%, #d7f4ff 68%, #86cf70 69%, #5aa652 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06), 0 16px 30px rgba(0,0,0,.18);
+}
+.fc-faceflap-skyline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 32px;
+  height: 52px;
+  background: linear-gradient(180deg, rgba(64,117,145,.08), rgba(64,117,145,.18));
+  clip-path: polygon(0 100%, 0 62%, 9% 62%, 9% 44%, 17% 44%, 17% 72%, 25% 72%, 25% 30%, 32% 30%, 32% 58%, 39% 58%, 39% 18%, 48% 18%, 48% 66%, 57% 66%, 57% 42%, 65% 42%, 65% 74%, 74% 74%, 74% 26%, 82% 26%, 82% 60%, 91% 60%, 91% 36%, 100% 36%, 100% 100%);
+}
+.fc-faceflap-pipes { position: absolute; inset: 0; }
+.fc-faceflap-pipe {
+  position: absolute;
+  background: linear-gradient(90deg, #46a85c, #6ed66d 45%, #3f8f4c 100%);
+  border: 1px solid rgba(0,0,0,.14);
+  box-shadow: inset 3px 0 0 rgba(255,255,255,.14), inset -3px 0 0 rgba(0,0,0,.12);
+}
+.fc-faceflap-pipe.is-top {
+  top: 0;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+.fc-faceflap-pipe.is-bottom {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+.fc-faceflap-bird {
+  position: absolute;
+  left: 58px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: url('../assets/face-flap-bird.png') center/cover no-repeat, linear-gradient(145deg, #ffd873, #e79b3e);
+  box-shadow: 0 6px 14px rgba(0,0,0,.22), inset 0 0 0 2px rgba(255,255,255,.35);
+  z-index: 2;
+}
+.fc-faceflap-status {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(14,24,35,.52);
+  border: 1px solid rgba(255,255,255,.1);
+  color: rgba(255,255,255,.92);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 3;
+  backdrop-filter: blur(4px);
+}
+.fc-faceflap-status strong { font-size: 12px; }
+.fc-faceflap-status span { font-size: 10px; line-height: 1.3; color: rgba(255,255,255,.8); }
+.fc-faceflap-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 7px;
+}
+.fc-faceflap-controls button { min-width: 0; }

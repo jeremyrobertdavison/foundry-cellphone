@@ -86,6 +86,7 @@ const state = {
   ticTacToe: { board: Array(9).fill(null), turn: "X", status: "playing", aiTimer: null },
   minesweeper: { cells: [], status: "ready", flagMode: false, minesPlaced: false },
   runner: { running: false, paused: false, gameOver: false, interval: null, playerY: 0, velocityY: 0, obstacles: [], score: 0, ticks: 0, spawnIn: 34 },
+  faceFlap: { running: false, paused: false, gameOver: false, interval: null, y: 150, velocity: 0, pipes: [], score: 0, ticks: 0, spawnIn: 40 },
   guessNumber: { target: Math.floor(Math.random() * 100) + 1, attempts: 0, status: "playing", feedback: "I picked a number from 1 to 100." },
   stackIt: { layers: [], moving: null, running: false, paused: false, gameOver: false, interval: null, score: 0, direction: 1, speed: 1.25 },
   blockDrop: { board: [], current: null, next: null, running: false, paused: false, gameOver: false, interval: null, score: 0, lines: 0 },
@@ -173,7 +174,7 @@ Hooks.once("init", () => {
     scope: "client",
     config: false,
     type: Object,
-    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0, chessWins: 0, chessLosses: 0, chessDraws: 0, farkleWins: 0, farkleLosses: 0 },
+    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, faceFlapBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0, chessWins: 0, chessLosses: 0, chessDraws: 0, farkleWins: 0, farkleLosses: 0 },
     onChange: () => refreshAll()
   });
 
@@ -1463,7 +1464,7 @@ function updateHeader() {
 
   if (state.app === "arcade") {
     back.hidden = false;
-    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop", chess: "Chess", farkle: "Farkle" };
+    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", faceflap: "Face Flap", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop", chess: "Chess", farkle: "Farkle" };
     title.textContent = arcadeTitles[state.arcadeGame] || "Arcade";
     subtitle.textContent = state.arcadeGame === "menu" ? "Pick a game" : "Cellphone games";
     return;
@@ -6247,6 +6248,7 @@ function getArcadeStats() {
     ticTacToeDraws: Number(raw.ticTacToeDraws || 0),
     minesweeperWins: Number(raw.minesweeperWins || 0),
     runnerBest: Number(raw.runnerBest || 0),
+    faceFlapBest: Number(raw.faceFlapBest || 0),
     guessNumberWins: Number(raw.guessNumberWins || 0),
     guessNumberBestAttempts: Number(raw.guessNumberBestAttempts || 0),
     stackItBest: Number(raw.stackItBest || 0),
@@ -6289,6 +6291,10 @@ function renderArcadeView() {
     renderRunnerGame(container);
     return;
   }
+  if (state.arcadeGame === 'faceflap') {
+    renderFaceFlapGame(container);
+    return;
+  }
   if (state.arcadeGame === 'guessnumber') {
     renderGuessNumber(container);
     return;
@@ -6315,7 +6321,7 @@ function renderArcadeView() {
 function renderArcadeMenu(container) {
   const intro = document.createElement('div');
   intro.className = 'fc-arcade-intro';
-  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Nine quick games for downtime between scenes.</span></div>';
+  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Ten quick games for downtime between scenes.</span></div>';
   container.appendChild(intro);
 
   const stats = getArcadeStats();
@@ -6375,6 +6381,20 @@ function renderArcadeMenu(container) {
   runner.addEventListener('click', () => {
     state.arcadeGame = 'runner';
     if (state.runner.gameOver) resetRunnerGame();
+    renderPhone();
+  });
+
+  const faceFlap = document.createElement('button');
+  faceFlap.type = 'button';
+  faceFlap.className = 'fc-arcade-game-card';
+  faceFlap.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-faceflap"><i class="fa-solid fa-feather-pointed"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Face Flap</strong><small>Best score: ${stats.faceFlapBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  faceFlap.addEventListener('click', () => {
+    state.arcadeGame = 'faceflap';
+    if (!state.faceFlap.pipes.length || state.faceFlap.gameOver) resetFaceFlapGame();
     renderPhone();
   });
 
@@ -6448,13 +6468,14 @@ function renderArcadeMenu(container) {
     renderPhone();
   });
 
-  grid.append(snake, ttt, mines, runner, guess, stack, blockDrop, chess, farkle);
+  grid.append(snake, ttt, mines, runner, faceFlap, guess, stack, blockDrop, chess, farkle);
   container.appendChild(grid);
 }
 
 function pauseArcadeActionGames() {
   pauseSnakeGame();
   pauseRunnerGame();
+  pauseFaceFlapGame();
   pauseStackItGame();
   pauseBlockDropGame();
   stopChessAi();
@@ -7131,6 +7152,201 @@ function updateRunnerBoard() {
 }
 
 // ---------------------------
+// Face Flap
+const FACE_FLAP_WIDTH = 220;
+const FACE_FLAP_HEIGHT = 300;
+const FACE_FLAP_TICK_MS = 33;
+const FACE_FLAP_BIRD_X = 58;
+const FACE_FLAP_BIRD_SIZE = 42;
+const FACE_FLAP_PIPE_WIDTH = 42;
+const FACE_FLAP_GAP = 92;
+
+function resetFaceFlapGame() {
+  stopFaceFlapInterval();
+  state.faceFlap.running = false;
+  state.faceFlap.paused = false;
+  state.faceFlap.gameOver = false;
+  state.faceFlap.y = 140;
+  state.faceFlap.velocity = 0;
+  state.faceFlap.pipes = [];
+  state.faceFlap.score = 0;
+  state.faceFlap.ticks = 0;
+  state.faceFlap.spawnIn = 34;
+}
+
+function stopFaceFlapInterval() {
+  if (state.faceFlap.interval) {
+    clearInterval(state.faceFlap.interval);
+    state.faceFlap.interval = null;
+  }
+}
+
+function startFaceFlapGame() {
+  if (state.faceFlap.gameOver) resetFaceFlapGame();
+  state.faceFlap.running = true;
+  state.faceFlap.paused = false;
+  stopFaceFlapInterval();
+  state.faceFlap.interval = setInterval(stepFaceFlapGame, FACE_FLAP_TICK_MS);
+  updateFaceFlapBoard();
+}
+
+function pauseFaceFlapGame() {
+  if (!state.faceFlap.running) return;
+  state.faceFlap.running = false;
+  state.faceFlap.paused = !state.faceFlap.gameOver;
+  stopFaceFlapInterval();
+  if (state.phoneOpen && state.app === 'arcade' && state.arcadeGame === 'faceflap' && !state.call) updateFaceFlapBoard();
+}
+
+function flapFaceFlap() {
+  if (state.faceFlap.gameOver) {
+    resetFaceFlapGame();
+    startFaceFlapGame();
+    return;
+  }
+  if (!state.faceFlap.running && !state.faceFlap.paused) startFaceFlapGame();
+  else if (state.faceFlap.paused) startFaceFlapGame();
+  state.faceFlap.velocity = -5.4;
+  updateFaceFlapBoard();
+}
+
+function randomFaceFlapGapY() {
+  return 70 + Math.floor(Math.random() * (FACE_FLAP_HEIGHT - 140));
+}
+
+function spawnFaceFlapPipe() {
+  state.faceFlap.pipes.push({ x: FACE_FLAP_WIDTH + 6, gapY: randomFaceFlapGapY(), passed: false });
+}
+
+function finishFaceFlapGame() {
+  state.faceFlap.gameOver = true;
+  state.faceFlap.running = false;
+  state.faceFlap.paused = false;
+  stopFaceFlapInterval();
+  const stats = getArcadeStats();
+  if (state.faceFlap.score > stats.faceFlapBest) void saveArcadeStats({ faceFlapBest: state.faceFlap.score });
+  updateFaceFlapBoard();
+}
+
+function stepFaceFlapGame() {
+  state.faceFlap.velocity += 0.34;
+  state.faceFlap.y += state.faceFlap.velocity;
+  state.faceFlap.spawnIn -= 1;
+  if (state.faceFlap.spawnIn <= 0) {
+    spawnFaceFlapPipe();
+    state.faceFlap.spawnIn = Math.max(34, 52 - Math.floor(state.faceFlap.score / 2));
+  }
+  const speed = 2.5 + Math.min(2.2, state.faceFlap.score * 0.08);
+  state.faceFlap.pipes.forEach((pipe) => { pipe.x -= speed; });
+  state.faceFlap.pipes = state.faceFlap.pipes.filter((pipe) => pipe.x + FACE_FLAP_PIPE_WIDTH > -6);
+
+  const birdTop = state.faceFlap.y;
+  const birdBottom = state.faceFlap.y + FACE_FLAP_BIRD_SIZE;
+  if (birdTop <= 0 || birdBottom >= FACE_FLAP_HEIGHT) {
+    finishFaceFlapGame();
+    return;
+  }
+
+  for (const pipe of state.faceFlap.pipes) {
+    if (!pipe.passed && pipe.x + FACE_FLAP_PIPE_WIDTH < FACE_FLAP_BIRD_X) {
+      pipe.passed = true;
+      state.faceFlap.score += 1;
+    }
+    const overlapX = FACE_FLAP_BIRD_X + FACE_FLAP_BIRD_SIZE > pipe.x && FACE_FLAP_BIRD_X < pipe.x + FACE_FLAP_PIPE_WIDTH;
+    if (overlapX) {
+      const gapTop = pipe.gapY - FACE_FLAP_GAP / 2;
+      const gapBottom = pipe.gapY + FACE_FLAP_GAP / 2;
+      if (birdTop < gapTop || birdBottom > gapBottom) {
+        finishFaceFlapGame();
+        return;
+      }
+    }
+  }
+
+  updateFaceFlapBoard();
+}
+
+function renderFaceFlapGame(container) {
+  const stats = getArcadeStats();
+  if (!state.faceFlap.pipes.length && !state.faceFlap.running && !state.faceFlap.paused && !state.faceFlap.gameOver) resetFaceFlapGame();
+  container.innerHTML = `
+    <div class="fc-faceflap-shell">
+      <div class="fc-arcade-scorebar"><span>Score <strong class="fc-faceflap-score">${state.faceFlap.score}</strong></span><span>Best <strong class="fc-faceflap-best">${Math.max(stats.faceFlapBest, state.faceFlap.score)}</strong></span></div>
+      <div class="fc-faceflap-board" tabindex="0" role="button" aria-label="Face Flap game board. Tap to flap.">
+        <div class="fc-faceflap-skyline"></div>
+        <div class="fc-faceflap-pipes"></div>
+        <div class="fc-faceflap-bird"></div>
+        <div class="fc-faceflap-status"></div>
+      </div>
+      <div class="fc-faceflap-controls">
+        <button type="button" class="fc-arcade-primary fc-faceflap-flap"><i class="fa-solid fa-feather-pointed"></i> Flap</button>
+        <button type="button" class="fc-arcade-secondary fc-faceflap-pause"><i class="fa-solid fa-pause"></i> Pause</button>
+        <button type="button" class="fc-arcade-secondary fc-faceflap-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+      </div>
+    </div>
+  `;
+  const board = container.querySelector('.fc-faceflap-board');
+  const flapBtn = container.querySelector('.fc-faceflap-flap');
+  const pauseBtn = container.querySelector('.fc-faceflap-pause');
+  const newBtn = container.querySelector('.fc-faceflap-new');
+  board?.addEventListener('click', () => flapFaceFlap());
+  flapBtn?.addEventListener('click', () => flapFaceFlap());
+  pauseBtn?.addEventListener('click', () => {
+    if (state.faceFlap.running) pauseFaceFlapGame();
+    else startFaceFlapGame();
+  });
+  newBtn?.addEventListener('click', () => {
+    resetFaceFlapGame();
+    updateFaceFlapBoard();
+  });
+  updateFaceFlapBoard();
+}
+
+function updateFaceFlapBoard() {
+  const board = state.root?.querySelector('.fc-faceflap-board');
+  if (!board) return;
+  const bird = board.querySelector('.fc-faceflap-bird');
+  const pipesHost = board.querySelector('.fc-faceflap-pipes');
+  const status = board.querySelector('.fc-faceflap-status');
+  const score = state.root.querySelector('.fc-faceflap-score');
+  const best = state.root.querySelector('.fc-faceflap-best');
+  const pauseBtn = state.root.querySelector('.fc-faceflap-pause');
+  const flapBtn = state.root.querySelector('.fc-faceflap-flap');
+  if (bird) {
+    bird.style.top = `${Math.round(state.faceFlap.y)}px`;
+    const rotation = Math.max(-25, Math.min(70, state.faceFlap.velocity * 7));
+    bird.style.transform = `rotate(${rotation}deg)`;
+  }
+  if (pipesHost) {
+    pipesHost.replaceChildren();
+    for (const pipe of state.faceFlap.pipes) {
+      const top = document.createElement('div');
+      top.className = 'fc-faceflap-pipe is-top';
+      top.style.left = `${pipe.x}px`;
+      top.style.width = `${FACE_FLAP_PIPE_WIDTH}px`;
+      top.style.height = `${Math.max(0, pipe.gapY - FACE_FLAP_GAP / 2)}px`;
+      const bottom = document.createElement('div');
+      bottom.className = 'fc-faceflap-pipe is-bottom';
+      bottom.style.left = `${pipe.x}px`;
+      bottom.style.width = `${FACE_FLAP_PIPE_WIDTH}px`;
+      bottom.style.top = `${pipe.gapY + FACE_FLAP_GAP / 2}px`;
+      bottom.style.height = `${Math.max(0, FACE_FLAP_HEIGHT - (pipe.gapY + FACE_FLAP_GAP / 2))}px`;
+      pipesHost.appendChild(top);
+      pipesHost.appendChild(bottom);
+    }
+  }
+  if (score) score.textContent = String(state.faceFlap.score);
+  if (best) best.textContent = String(Math.max(getArcadeStats().faceFlapBest, state.faceFlap.score));
+  if (pauseBtn) pauseBtn.innerHTML = state.faceFlap.running ? '<i class="fa-solid fa-pause"></i> Pause' : '<i class="fa-solid fa-play"></i> Resume';
+  if (flapBtn) flapBtn.innerHTML = state.faceFlap.gameOver ? '<i class="fa-solid fa-rotate-right"></i> Restart' : '<i class="fa-solid fa-feather-pointed"></i> Flap';
+  if (status) {
+    if (state.faceFlap.gameOver) status.innerHTML = `<strong>Game over</strong><span>You scored ${state.faceFlap.score}. Tap Flap to restart.</span>`;
+    else if (state.faceFlap.paused) status.innerHTML = `<strong>Paused</strong><span>Press Flap or Resume to continue.</span>`;
+    else if (!state.faceFlap.running) status.innerHTML = `<strong>Face Flap</strong><span>Tap the board or press Space/Up to flap.</span>`;
+    else status.innerHTML = `<strong>Keep flying</strong><span>Dodge the pipes and keep the face airborne.</span>`;
+  }
+}
+
 // Guess My Number
 // ---------------------------
 

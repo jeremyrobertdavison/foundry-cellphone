@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.7.0
+
+- Added **Face Flap** to Arcade, a flappy-style obstacle game using the provided face image as the flying character.
+- Added tap/click/keyboard controls, pause and restart actions, and a saved local best score for Face Flap.
+
 ## 2.6.0
 
 - Phone resizing now scales cellphone font sizes proportionally by default.
