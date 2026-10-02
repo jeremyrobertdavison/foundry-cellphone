@@ -5198,9 +5198,9 @@
 }
 
 .fc-app-icon-settings {
-  grid-column: 1 / -1;
-  justify-self: center;
-  width: 90px;
+  grid-column: auto;
+  justify-self: stretch;
+  width: auto;
 }
 
 .fc-app-symbol-settings {
@@ -5553,3 +5553,272 @@
   line-height: 1.3;
   text-align: center;
 }
+
+
+/* v2.9.0 Pocket Pet app */
+.fc-app-symbol-pocketpet {
+  background: linear-gradient(145deg, #f08eb5, #a84d83);
+  border: 1px solid rgba(255,255,255,.18);
+}
+
+.fc-pocketpet-view[hidden] { display: none !important; }
+.fc-pocketpet-view {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.18) transparent;
+}
+
+.fc-pocketpet-content,
+.fc-pocketpet-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.fc-pocketpet-hatch {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: rgba(255,255,255,.045);
+  text-align: center;
+}
+
+.fc-pocketpet-egg {
+  width: 86px;
+  height: 102px;
+  display: grid;
+  place-items: center;
+  border-radius: 48% 48% 42% 42%;
+  background: radial-gradient(circle at 35% 28%, #fff7c6, #ffd9e8 48%, #d58bc1 100%);
+  color: rgba(87,45,75,.82);
+  font-size: calc(42px * var(--fc-font-scale, 1));
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.26), 0 12px 28px rgba(0,0,0,.24);
+}
+
+.fc-pocketpet-hatch > strong { font-size: calc(15px * var(--fc-font-scale, 1)); color: #fff; }
+.fc-pocketpet-hatch > span { max-width: 220px; font-size: calc(10px * var(--fc-font-scale, 1)); line-height: 1.4; color: rgba(255,255,255,.65); }
+
+.fc-pocketpet-hatch-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.fc-pocketpet-hatch-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-align: left;
+  font-size: calc(9px * var(--fc-font-scale, 1));
+  color: rgba(255,255,255,.62);
+}
+.fc-pocketpet-hatch-form input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 9px;
+  background: rgba(0,0,0,.24);
+  color: #fff;
+  padding: 7px 9px;
+}
+.fc-pocketpet-hatch-form button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #f08eb5, #a84d83);
+  color: #fff;
+  font-weight: 800;
+}
+
+.fc-pocketpet-stage {
+  position: relative;
+  height: 190px;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: linear-gradient(180deg, #8cd1ee 0%, #d7eff5 65%, #98d47b 66%, #64a95d 100%);
+  box-shadow: inset 0 0 26px rgba(255,255,255,.08);
+}
+.fc-pocketpet-stage.is-sleeping { background: linear-gradient(180deg, #273b68 0%, #53658f 65%, #5d7f58 66%, #405d40 100%); }
+.fc-pocketpet-stage.is-sick { filter: saturate(.72); }
+.fc-pocketpet-sky span {
+  position: absolute;
+  width: 46px;
+  height: 15px;
+  border-radius: 20px;
+  background: rgba(255,255,255,.65);
+  filter: blur(.2px);
+}
+.fc-pocketpet-sky span:nth-child(1) { left: 18px; top: 24px; }
+.fc-pocketpet-sky span:nth-child(2) { right: 24px; top: 48px; width: 62px; }
+.fc-pocketpet-sky span:nth-child(3) { left: 96px; top: 76px; width: 38px; opacity: .55; }
+.fc-pocketpet-ground {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: -24px;
+  height: 72px;
+  border-radius: 50% 50% 0 0;
+  background: rgba(45,103,51,.22);
+}
+.fc-pocketpet-creature {
+  --pet-main: #f6a8c5;
+  --pet-dark: #bd638e;
+  position: absolute;
+  left: 50%;
+  bottom: 35px;
+  width: 94px;
+  height: 86px;
+  transform: translateX(-50%);
+  border-radius: 45% 45% 42% 42%;
+  background: linear-gradient(145deg, var(--pet-main), var(--pet-dark));
+  border: 3px solid rgba(255,255,255,.32);
+  box-shadow: 0 12px 22px rgba(0,0,0,.24), inset 0 5px 10px rgba(255,255,255,.14);
+}
+.fc-pocketpet-creature.variant-1 { --pet-main: #8bd6d0; --pet-dark: #3d918e; }
+.fc-pocketpet-creature.variant-2 { --pet-main: #f2cb72; --pet-dark: #b7793c; }
+.fc-pocketpet-creature::before,
+.fc-pocketpet-creature::after {
+  content: '';
+  position: absolute;
+  top: -16px;
+  width: 33px;
+  height: 37px;
+  background: var(--pet-main);
+  border: 3px solid rgba(255,255,255,.27);
+  z-index: -1;
+}
+.fc-pocketpet-creature::before { left: 5px; border-radius: 78% 15% 55% 30%; transform: rotate(-22deg); }
+.fc-pocketpet-creature::after { right: 5px; border-radius: 15% 78% 30% 55%; transform: rotate(22deg); }
+.fc-pocketpet-eye {
+  position: absolute;
+  top: 31px;
+  width: 10px;
+  height: 13px;
+  border-radius: 50%;
+  background: #25202b;
+  box-shadow: inset 2px 2px 0 rgba(255,255,255,.55);
+}
+.fc-pocketpet-eye.eye-left { left: 25px; }
+.fc-pocketpet-eye.eye-right { right: 25px; }
+.fc-pocketpet-creature.is-sleeping .fc-pocketpet-eye { height: 3px; top: 38px; border-radius: 3px; box-shadow: none; }
+.fc-pocketpet-mouth {
+  position: absolute;
+  left: 50%;
+  top: 53px;
+  width: 18px;
+  height: 8px;
+  transform: translateX(-50%);
+  border-bottom: 3px solid #6c3453;
+  border-radius: 0 0 50% 50%;
+}
+.fc-pocketpet-stage.is-hungry .fc-pocketpet-mouth,
+.fc-pocketpet-stage.is-tired .fc-pocketpet-mouth,
+.fc-pocketpet-stage.is-dirty .fc-pocketpet-mouth,
+.fc-pocketpet-stage.is-lonely .fc-pocketpet-mouth,
+.fc-pocketpet-stage.is-sick .fc-pocketpet-mouth {
+  border-bottom: 0;
+  border-top: 3px solid #6c3453;
+  border-radius: 50% 50% 0 0;
+}
+.fc-pocketpet-cheek {
+  position: absolute;
+  top: 50px;
+  width: 12px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255,92,129,.35);
+}
+.fc-pocketpet-cheek.cheek-left { left: 14px; }
+.fc-pocketpet-cheek.cheek-right { right: 14px; }
+.fc-pocketpet-z {
+  position: absolute;
+  right: -20px;
+  top: -18px;
+  font-size: calc(18px * var(--fc-font-scale, 1));
+  font-weight: 900;
+  color: rgba(255,255,255,.9);
+  transform: rotate(10deg);
+}
+
+.fc-pocketpet-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+}
+.fc-pocketpet-name-row > div { display: flex; flex-direction: column; min-width: 0; }
+.fc-pocketpet-name-row strong { font-size: calc(15px * var(--fc-font-scale, 1)); color: #fff; }
+.fc-pocketpet-name-row span,
+.fc-pocketpet-name-row small { font-size: calc(9px * var(--fc-font-scale, 1)); color: rgba(255,255,255,.55); }
+.fc-pocketpet-message {
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.065);
+  color: rgba(255,255,255,.78);
+  font-size: calc(9px * var(--fc-font-scale, 1));
+  line-height: 1.35;
+}
+.fc-pocketpet-stats { display: flex; flex-direction: column; gap: 6px; }
+.fc-pocketpet-stat {
+  display: grid;
+  grid-template-columns: 84px minmax(0,1fr) 25px;
+  gap: 7px;
+  align-items: center;
+}
+.fc-pocketpet-stat-label {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: rgba(255,255,255,.72);
+  font-size: calc(8px * var(--fc-font-scale, 1));
+  font-weight: 700;
+}
+.fc-pocketpet-stat-label i { width: 12px; text-align: center; }
+.fc-pocketpet-meter {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: rgba(255,255,255,.09);
+}
+.fc-pocketpet-meter b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #74d9b1, #9be17e);
+}
+.fc-pocketpet-stat.is-low .fc-pocketpet-meter b { background: linear-gradient(90deg, #df6a6a, #f1a053); }
+.fc-pocketpet-stat > strong { text-align: right; color: rgba(255,255,255,.72); font-size: calc(8px * var(--fc-font-scale, 1)); }
+
+.fc-pocketpet-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 7px;
+}
+.fc-pocketpet-actions button {
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 11px;
+  background: rgba(255,255,255,.055);
+  color: rgba(255,255,255,.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: calc(9px * var(--fc-font-scale, 1));
+  font-weight: 800;
+  cursor: pointer;
+}
+.fc-pocketpet-actions button:hover:not(:disabled) { background: rgba(255,255,255,.095); }
+.fc-pocketpet-actions button:disabled { opacity: .35; cursor: default; }

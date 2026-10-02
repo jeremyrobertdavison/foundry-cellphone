@@ -14,6 +14,7 @@ const MONDO_RIDES_SETTING = "mondoRidesScenes";
 const PHONE_SCALE_SETTING = "phoneScalePercent";
 const PHONE_TEXT_SCALE_SETTING = "phoneTextScalePercent";
 const PHONE_TEXT_FOLLOW_SIZE_SETTING = "phoneTextFollowsSize";
+const POCKET_PET_SETTING = "pocketPetState";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -97,6 +98,7 @@ const state = {
   musicVolumeTimer: null,
   musicLastAmbientVolume: 0.7,
   musicAmbientVolumeTimer: null,
+  pocketPetTimer: null,
   unreadGroups: new Map(),
   unreadDirect: new Map(),
   incomingTyping: new Map(),
@@ -226,6 +228,15 @@ Hooks.once("init", () => {
       applyPhoneScale();
       if (state.phoneOpen && state.app === "settings") renderSettingsView();
     }
+  });
+
+  game.settings.register(MODULE_ID, POCKET_PET_SETTING, {
+    name: "Pocket Pet State",
+    hint: "Personal virtual-pet state for this Foundry client.",
+    scope: "client",
+    config: false,
+    type: Object,
+    default: {}
   });
 });
 
@@ -498,6 +509,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-music"><i class="fa-solid fa-headphones"></i></span>
               <span class="fc-app-label">Music</span>
             </button>
+            <button class="fc-app-icon fc-app-icon-pocketpet" type="button" data-app="pocketpet">
+              <span class="fc-app-symbol fc-app-symbol-pocketpet"><i class="fa-solid fa-paw"></i></span>
+              <span class="fc-app-label">Pocket Pet</span>
+            </button>
             <button class="fc-app-icon fc-app-icon-settings" type="button" data-app="settings">
               <span class="fc-app-symbol fc-app-symbol-settings"><i class="fa-solid fa-gear"></i></span>
               <span class="fc-app-label">Settings</span>
@@ -604,6 +619,10 @@ function buildPhone() {
             <div class="fc-music-content"></div>
           </section>
 
+          <section class="fc-pocketpet-view" hidden>
+            <div class="fc-pocketpet-content"></div>
+          </section>
+
           <section class="fc-settings-view" hidden>
             <div class="fc-settings-content"></div>
           </section>
@@ -676,7 +695,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo', 'music', 'settings'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo', 'music', 'pocketpet', 'settings'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -730,6 +749,7 @@ function openApp(app) {
 
 function goHome() {
   stopTyping();
+  stopPocketPetTimer();
   pauseArcadeActionGames();
   closeLargeMapWindow();
   state.app = 'home';
@@ -761,6 +781,7 @@ function goHome() {
 
 function closePhone() {
   stopTyping();
+  stopPocketPetTimer();
   pauseArcadeActionGames();
   closeLargeMapWindow();
   state.phoneOpen = false;
@@ -789,6 +810,12 @@ function setMode(mode) {
 
 function goBack() {
   stopTyping();
+
+  if (state.app === "pocketpet") {
+    stopPocketPetTimer();
+    goHome();
+    return;
+  }
 
   if (state.app === "settings") {
     goHome();
@@ -1265,6 +1292,7 @@ function renderPhone() {
   const mapsView = state.root.querySelector(".fc-maps-view");
   const mondoView = state.root.querySelector(".fc-mondo-view");
   const musicView = state.root.querySelector(".fc-music-view");
+  const pocketPetView = state.root.querySelector(".fc-pocketpet-view");
   const settingsView = state.root.querySelector(".fc-settings-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
@@ -1285,6 +1313,7 @@ function renderPhone() {
   mapsView.hidden = true;
   mondoView.hidden = true;
   musicView.hidden = true;
+  pocketPetView.hidden = true;
   settingsView.hidden = true;
 
   if (inCallUi) {
@@ -1361,6 +1390,13 @@ function renderPhone() {
     return;
   }
 
+  if (state.app === "pocketpet") {
+    pocketPetView.hidden = false;
+    renderPocketPetView();
+    updateBadges();
+    return;
+  }
+
   if (state.app === "settings") {
     settingsView.hidden = false;
     renderSettingsView();
@@ -1425,6 +1461,13 @@ function updateHeader() {
   const title = state.root.querySelector(".fc-header-title");
   const subtitle = state.root.querySelector(".fc-header-subtitle");
   const back = state.root.querySelector(".fc-back");
+
+  if (state.app === "pocketpet") {
+    back.hidden = false;
+    title.textContent = "Pocket Pet";
+    subtitle.textContent = "Your virtual companion";
+    return;
+  }
 
   if (state.app === "settings") {
     back.hidden = false;
@@ -9810,6 +9853,262 @@ function autoSizeTextarea(textarea) {
   if (!textarea) return;
   textarea.style.height = "auto";
   textarea.style.height = `${Math.min(textarea.scrollHeight, 90)}px`;
+}
+
+
+// ---------------------------
+// Pocket Pet app
+// ---------------------------
+
+const POCKET_PET_MAX = 100;
+
+function clampPocketPetStat(value) {
+  const numeric = Number(value);
+  return Math.max(0, Math.min(POCKET_PET_MAX, Number.isFinite(numeric) ? numeric : 0));
+}
+
+function getPocketPetStoredState() {
+  const raw = game.settings.get(MODULE_ID, POCKET_PET_SETTING) || {};
+  if (!raw?.name || raw.ownerUserId !== game.user?.id) return null;
+  return {
+    schema: 1,
+    ownerUserId: raw.ownerUserId,
+    name: String(raw.name || 'Pocket Pet').slice(0, 24),
+    bornAt: Number(raw.bornAt || Date.now()),
+    lastUpdated: Number(raw.lastUpdated || Date.now()),
+    fullness: clampPocketPetStat(raw.fullness ?? 85),
+    happiness: clampPocketPetStat(raw.happiness ?? 85),
+    energy: clampPocketPetStat(raw.energy ?? 85),
+    cleanliness: clampPocketPetStat(raw.cleanliness ?? 85),
+    health: clampPocketPetStat(raw.health ?? 100),
+    sleeping: Boolean(raw.sleeping),
+    variant: Math.max(0, Math.min(2, Number(raw.variant) || 0))
+  };
+}
+
+function projectPocketPetState(raw, now = Date.now()) {
+  if (!raw) return null;
+  const elapsedHours = Math.max(0, Math.min(24 * 30, (now - Number(raw.lastUpdated || now)) / 3600000));
+  const sleeping = Boolean(raw.sleeping);
+  const fullnessRate = sleeping ? 1.1 : 2.0;
+  const happinessRate = sleeping ? 0.35 : 0.85;
+  const cleanlinessRate = sleeping ? 0.65 : 1.15;
+  const energyRate = sleeping ? 7.0 : -1.45;
+
+  const fullness = clampPocketPetStat(raw.fullness - elapsedHours * fullnessRate);
+  const happiness = clampPocketPetStat(raw.happiness - elapsedHours * happinessRate);
+  const cleanliness = clampPocketPetStat(raw.cleanliness - elapsedHours * cleanlinessRate);
+  const energy = clampPocketPetStat(raw.energy + elapsedHours * energyRate);
+
+  const weakest = Math.min(fullness, happiness, cleanliness, energy);
+  let health = clampPocketPetStat(raw.health);
+  if (weakest < 15) health -= elapsedHours * 2.1;
+  else if (weakest < 30) health -= elapsedHours * 0.8;
+  else if (fullness > 55 && happiness > 55 && cleanliness > 55 && energy > 55) health += elapsedHours * 0.35;
+  health = Math.max(5, clampPocketPetStat(health));
+
+  return { ...raw, fullness, happiness, energy, cleanliness, health, lastUpdated: now };
+}
+
+async function savePocketPetState(pet) {
+  if (!pet) return;
+  const clean = {
+    schema: 1,
+    ownerUserId: game.user.id,
+    name: String(pet.name || 'Pocket Pet').trim().slice(0, 24) || 'Pocket Pet',
+    bornAt: Number(pet.bornAt || Date.now()),
+    lastUpdated: Number(pet.lastUpdated || Date.now()),
+    fullness: Math.round(clampPocketPetStat(pet.fullness) * 10) / 10,
+    happiness: Math.round(clampPocketPetStat(pet.happiness) * 10) / 10,
+    energy: Math.round(clampPocketPetStat(pet.energy) * 10) / 10,
+    cleanliness: Math.round(clampPocketPetStat(pet.cleanliness) * 10) / 10,
+    health: Math.round(clampPocketPetStat(pet.health) * 10) / 10,
+    sleeping: Boolean(pet.sleeping),
+    variant: Math.max(0, Math.min(2, Number(pet.variant) || 0))
+  };
+  try {
+    await game.settings.set(MODULE_ID, POCKET_PET_SETTING, clean);
+  } catch (error) {
+    console.warn(`${MODULE_ID} | Could not save Pocket Pet`, error);
+    ui.notifications.warn('Pocket Pet could not be saved.');
+  }
+}
+
+function getPocketPetMood(pet) {
+  if (!pet) return { key: 'none', label: 'Waiting to hatch', message: 'A tiny companion is waiting for you.' };
+  if (pet.sleeping) return { key: 'sleeping', label: 'Sleeping', message: `${pet.name} is snoozing and recovering energy.` };
+  if (pet.health < 30) return { key: 'sick', label: 'Needs care', message: `${pet.name} is feeling rough. Bring those needs back up.` };
+  if (pet.fullness < 25) return { key: 'hungry', label: 'Hungry', message: `${pet.name} is making very pointed snack noises.` };
+  if (pet.energy < 25) return { key: 'tired', label: 'Tired', message: `${pet.name} can barely keep those little eyes open.` };
+  if (pet.cleanliness < 25) return { key: 'dirty', label: 'Messy', message: `${pet.name} could really use a cleanup.` };
+  if (pet.happiness < 25) return { key: 'lonely', label: 'Lonely', message: `${pet.name} wants some attention and playtime.` };
+  const average = (pet.fullness + pet.happiness + pet.energy + pet.cleanliness + pet.health) / 5;
+  if (average > 82) return { key: 'great', label: 'Thriving', message: `${pet.name} is having an excellent day.` };
+  if (average > 60) return { key: 'good', label: 'Content', message: `${pet.name} seems happy to see you.` };
+  return { key: 'okay', label: 'Okay', message: `${pet.name} is doing alright, but could use a little care.` };
+}
+
+function getPocketPetAgeDays(pet) {
+  return Math.max(0, Math.floor((Date.now() - Number(pet?.bornAt || Date.now())) / 86400000));
+}
+
+function startPocketPetTimer() {
+  if (state.pocketPetTimer) return;
+  state.pocketPetTimer = window.setInterval(() => {
+    if (!state.phoneOpen || state.app !== 'pocketpet') {
+      stopPocketPetTimer();
+      return;
+    }
+    renderPocketPetView();
+  }, 60000);
+}
+
+function stopPocketPetTimer() {
+  if (!state.pocketPetTimer) return;
+  window.clearInterval(state.pocketPetTimer);
+  state.pocketPetTimer = null;
+}
+
+async function hatchPocketPet(name) {
+  const now = Date.now();
+  const pet = {
+    schema: 1,
+    ownerUserId: game.user.id,
+    name: String(name || '').trim().slice(0, 24) || 'Pixel',
+    bornAt: now,
+    lastUpdated: now,
+    fullness: 88,
+    happiness: 90,
+    energy: 82,
+    cleanliness: 92,
+    health: 100,
+    sleeping: false,
+    variant: Math.floor(Math.random() * 3)
+  };
+  await savePocketPetState(pet);
+  renderPocketPetView();
+}
+
+async function applyPocketPetAction(action) {
+  const stored = getPocketPetStoredState();
+  if (!stored) return;
+  const pet = projectPocketPetState(stored);
+  if (!pet) return;
+
+  if (action === 'feed' && !pet.sleeping) {
+    pet.fullness = clampPocketPetStat(pet.fullness + 24);
+    pet.happiness = clampPocketPetStat(pet.happiness + 3);
+    pet.cleanliness = clampPocketPetStat(pet.cleanliness - 3);
+  } else if (action === 'play' && !pet.sleeping) {
+    pet.happiness = clampPocketPetStat(pet.happiness + 23);
+    pet.energy = clampPocketPetStat(pet.energy - 11);
+    pet.fullness = clampPocketPetStat(pet.fullness - 5);
+    pet.cleanliness = clampPocketPetStat(pet.cleanliness - 4);
+  } else if (action === 'clean' && !pet.sleeping) {
+    pet.cleanliness = clampPocketPetStat(pet.cleanliness + 34);
+    pet.happiness = clampPocketPetStat(pet.happiness + 2);
+  } else if (action === 'sleep') {
+    pet.sleeping = !pet.sleeping;
+  }
+
+  const weakest = Math.min(pet.fullness, pet.happiness, pet.energy, pet.cleanliness);
+  if (weakest > 45) pet.health = clampPocketPetStat(pet.health + 2);
+  pet.lastUpdated = Date.now();
+  await savePocketPetState(pet);
+  renderPocketPetView();
+}
+
+function renderPocketPetView() {
+  const container = state.root?.querySelector('.fc-pocketpet-content');
+  if (!container) return;
+  container.replaceChildren();
+  startPocketPetTimer();
+
+  const stored = getPocketPetStoredState();
+  if (!stored) {
+    const hatch = document.createElement('div');
+    hatch.className = 'fc-pocketpet-hatch';
+    hatch.innerHTML = `
+      <div class="fc-pocketpet-egg" aria-hidden="true"><i class="fa-solid fa-egg"></i></div>
+      <strong>Hatch a Pocket Pet</strong>
+      <span>Your little companion will have needs that change over real time.</span>
+      <form class="fc-pocketpet-hatch-form">
+        <label>Pet name<input type="text" maxlength="24" placeholder="Pixel" autocomplete="off"></label>
+        <button type="submit"><i class="fa-solid fa-heart"></i> Hatch Pet</button>
+      </form>
+    `;
+    const form = hatch.querySelector('.fc-pocketpet-hatch-form');
+    const input = form.querySelector('input');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      await hatchPocketPet(input.value);
+    });
+    container.appendChild(hatch);
+    return;
+  }
+
+  const pet = projectPocketPetState(stored);
+  const mood = getPocketPetMood(pet);
+  const age = getPocketPetAgeDays(pet);
+  const variant = Math.max(0, Math.min(2, pet.variant || 0));
+  const shell = document.createElement('div');
+  shell.className = 'fc-pocketpet-shell';
+  shell.innerHTML = `
+    <div class="fc-pocketpet-stage is-${mood.key}">
+      <div class="fc-pocketpet-sky"><span></span><span></span><span></span></div>
+      <div class="fc-pocketpet-creature variant-${variant}${pet.sleeping ? ' is-sleeping' : ''}" aria-label="Virtual pet">
+        <span class="fc-pocketpet-eye eye-left"></span>
+        <span class="fc-pocketpet-eye eye-right"></span>
+        <span class="fc-pocketpet-mouth"></span>
+        <span class="fc-pocketpet-cheek cheek-left"></span>
+        <span class="fc-pocketpet-cheek cheek-right"></span>
+        ${pet.sleeping ? '<span class="fc-pocketpet-z">Z</span>' : ''}
+      </div>
+      <div class="fc-pocketpet-ground"></div>
+    </div>
+    <div class="fc-pocketpet-name-row">
+      <div><strong>${escapeMissionText(pet.name)}</strong><span>${escapeMissionText(mood.label)}</span></div>
+      <small>Age ${age} ${age === 1 ? 'day' : 'days'}</small>
+    </div>
+    <div class="fc-pocketpet-message">${escapeMissionText(mood.message)}</div>
+    <div class="fc-pocketpet-stats"></div>
+    <div class="fc-pocketpet-actions">
+      <button type="button" data-pet-action="feed" ${pet.sleeping ? 'disabled' : ''}><i class="fa-solid fa-bowl-food"></i><span>Feed</span></button>
+      <button type="button" data-pet-action="play" ${pet.sleeping ? 'disabled' : ''}><i class="fa-solid fa-baseball"></i><span>Play</span></button>
+      <button type="button" data-pet-action="clean" ${pet.sleeping ? 'disabled' : ''}><i class="fa-solid fa-soap"></i><span>Clean</span></button>
+      <button type="button" data-pet-action="sleep"><i class="fa-solid ${pet.sleeping ? 'fa-sun' : 'fa-moon'}"></i><span>${pet.sleeping ? 'Wake' : 'Sleep'}</span></button>
+    </div>
+  `;
+
+  const statsHost = shell.querySelector('.fc-pocketpet-stats');
+  const stats = [
+    ['Fullness', 'fa-bowl-food', pet.fullness],
+    ['Happiness', 'fa-face-smile', pet.happiness],
+    ['Energy', 'fa-bolt', pet.energy],
+    ['Cleanliness', 'fa-soap', pet.cleanliness],
+    ['Health', 'fa-heart-pulse', pet.health]
+  ];
+  for (const [label, icon, value] of stats) {
+    const row = document.createElement('div');
+    const rounded = Math.round(value);
+    row.className = `fc-pocketpet-stat${rounded < 25 ? ' is-low' : ''}`;
+    row.innerHTML = `
+      <span class="fc-pocketpet-stat-label"><i class="fa-solid ${icon}"></i>${label}</span>
+      <span class="fc-pocketpet-meter"><b style="width:${rounded}%"></b></span>
+      <strong>${rounded}</strong>
+    `;
+    statsHost.appendChild(row);
+  }
+
+  shell.querySelectorAll('[data-pet-action]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      await applyPocketPetAction(button.dataset.petAction);
+    });
+  });
+  container.appendChild(shell);
 }
 
 function getPhoneScalePercent() {

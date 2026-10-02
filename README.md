@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **2.8.0** adds **Demon Run**, an original lightweight retro first-person shooter to the Arcade while preserving the existing phone apps and per-user settings.
+Version **2.9.0** adds **Pocket Pet**, a personal virtual-pet app with real-time needs, care actions, mood, age, and persistent per-client pet progress.
 
 ## Cellphone apps
 
@@ -16,6 +16,7 @@ Version **2.8.0** adds **Demon Run**, an original lightweight retro first-person
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
 - **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
 - **Music** — streaming-style now-playing view with client-only personal Music and Environment volume controls.
+- **Pocket Pet** — hatch and care for a personal virtual pet whose needs change over real elapsed time.
 - **Settings** — per-user phone resizing from 60% to 150%, automatic proportional text scaling, and an optional independent text-size control.
 
 ## Messages
@@ -100,6 +101,12 @@ Snake, Runner, Face Flap, Stack It, Block Drop, and Demon Run automatically paus
 The Music app provides a generic streaming-player presentation for Foundry's native Playlist system. It shows the currently playing track and playlist, displays additional simultaneously playing tracks when present, and updates when Foundry playlist playback changes.
 
 The **Your Music Volume** slider controls Foundry's client-side global Playlist volume setting. The **Your Environment Volume** slider controls Foundry's client-side Ambient volume setting for Scene environmental sounds. Both controls affect only the current user's listening level and include mute/restore buttons. Playback remains under normal Foundry/GM control; the app does not add player skip, pause, or track-selection permissions.
+
+## Pocket Pet
+
+The **Pocket Pet** app is a lightweight virtual pet. On first use, the player names and hatches a creature. The pet tracks **Fullness, Happiness, Energy, Cleanliness, and Health**. Those needs continue to change based on real elapsed time even while the phone is closed. Players can Feed, Play, Clean, and put the pet to Sleep or Wake it. The app also tracks the pet's age and changes its mood/message based on its current needs.
+
+Pocket Pet data is stored as a client-scoped module setting keyed to the current Foundry user ID, matching the personal/local behavior used by Arcade statistics and phone appearance settings. It is gameplay flavor rather than a GM-facing campaign system.
 
 ## Settings
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.0
+
+- Added **Pocket Pet**, a personal virtual-pet app inspired by classic keychain pet games.
+- Players can hatch and name a pet, then Feed, Play, Clean, and put it to Sleep/Wake.
+- Fullness, Happiness, Energy, Cleanliness, and Health change over real elapsed time and persist locally for that Foundry client/user.
+- Pocket Pet shows age, mood, stat bars, contextual messages, and three cosmetic creature variants.
+
 ## 2.8.0
 
 - Added **Demon Run** to Arcade, an original lightweight retro first-person shooter inspired by early 1990s ray-cast shooters.
