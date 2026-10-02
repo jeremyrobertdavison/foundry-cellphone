@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **2.6.0** expands the Settings app so cellphone text scales with phone size by default, while each player can optionally choose an independent text size for readability.
+Version **2.8.0** adds **Demon Run**, an original lightweight retro first-person shooter to the Arcade while preserving the existing phone apps and per-user settings.
 
 ## Cellphone apps
 
@@ -12,7 +12,7 @@ Version **2.6.0** expands the Settings app so cellphone text scales with phone s
 - **Browser** — GM-configured external website shortcuts plus permission-aware Foundry Journal search inside the phone.
 - **Notes** — private per-user notes with title/body editing and deletion.
 - **News** — GM-authored headline feed with blurb, publisher, author, and publication date/time.
-- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, Guess My Number, Stack It, Block Drop, Chess, and Farkle.
+- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, Face Flap, Guess My Number, Stack It, Block Drop, Chess, Farkle, and Demon Run.
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
 - **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
 - **Music** — streaming-style now-playing view with client-only personal Music and Environment volume controls.
@@ -79,19 +79,21 @@ The News app is a read-only feed for players. GMs can publish, edit, and delete 
 
 ## Arcade
 
-The Arcade includes nine lightweight games:
+The Arcade includes eleven lightweight games:
 
 - **Snake** — keyboard/WASD and on-screen controls, pause/resume, local best score.
 - **Tic Tac Toe** — play against a simple phone AI with local win/loss/draw stats.
 - **Minesweeper** — 8×8 board, 10 mines, first-click safety, Flag Mode/right-click flagging.
+- **Face Flap** — a flappy-style obstacle game using the bundled custom face image as the flying character, with local best-score tracking.
 - **Runner** — generic endless jump-and-dodge game with keyboard/tap controls and local best distance.
 - **Guess My Number** — guess a number from 1–100 with Too high / Too low feedback.
 - **Stack It** — time moving blocks to build the tallest tower possible; overhang is trimmed and a complete miss ends the run. Supports tap/click, Space/Enter, pause/resume, and a local best score.
 - **Block Drop** — a classic falling-block puzzle with seven block shapes, row clearing, increasing speed, keyboard/on-screen controls, hard drop, pause/resume, and local best score.
 - **Chess** — play White against a lightweight phone AI with legal move validation, check, checkmate, stalemate, captures, and automatic queen promotion. Arcade Chess intentionally omits castling and en passant.
 - **Farkle** — a quick first-to-3000 dice game against the phone with selectable scoring dice, banking, hot dice, farkles, common combination scoring, and local win/loss stats.
+- **Demon Run** — an original compact retro first-person shooter with three ray-cast levels, creatures, health/ammo pickups, shooting, exits, touch controls, and keyboard controls.
 
-Snake, Runner, Stack It, and Block Drop automatically pause when appropriate, including when leaving Arcade or closing the phone.
+Snake, Runner, Face Flap, Stack It, Block Drop, and Demon Run automatically pause when appropriate, including when leaving Arcade or closing the phone.
 
 ## Music
 

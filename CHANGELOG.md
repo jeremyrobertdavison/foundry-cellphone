@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.8.0
+
+- Added **Demon Run** to Arcade, an original lightweight retro first-person shooter inspired by early 1990s ray-cast shooters.
+- Demon Run includes three compact levels, pseudo-3D ray-cast walls, hostile creatures, health and ammo pickups, shooting, score tracking, exits, touch controls, and keyboard controls.
+- Demon Run automatically pauses with the other action games when the phone closes, Arcade is exited, or a cellphone call interrupts play.
+- Added a local Demon Run best score.
+- Restored keyboard flap controls for Face Flap (Space, Up Arrow, or W) while in the game.
+
+## 2.7.1
+
+- Increased the Face Flap pipe gap slightly to make the game a bit easier.
+
 ## 2.7.0
 
 - Added **Face Flap** to Arcade, a flappy-style obstacle game using the provided face image as the flying character.

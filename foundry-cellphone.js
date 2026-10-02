@@ -92,6 +92,7 @@ const state = {
   blockDrop: { board: [], current: null, next: null, running: false, paused: false, gameOver: false, interval: null, score: 0, lines: 0 },
   chess: { board: [], turn: "w", status: "playing", selected: null, legalTargets: [], message: "Your move", aiTimer: null },
   farkle: { playerScore: 0, phoneScore: 0, turnScore: 0, diceCount: 6, dice: [], selected: new Set(), status: "player", message: "Roll the dice to start.", rolled: false, phoneTimer: null },
+  demonRun: { level: 0, map: [], player: { x: 1.5, y: 1.5, dir: 0, health: 100, ammo: 12 }, enemies: [], pickups: [], exit: null, score: 0, running: false, paused: false, gameOver: false, completed: false, interval: null, message: "Press Start or move to begin.", damageFlash: 0 },
   musicLastVolume: 0.7,
   musicVolumeTimer: null,
   musicLastAmbientVolume: 0.7,
@@ -174,7 +175,7 @@ Hooks.once("init", () => {
     scope: "client",
     config: false,
     type: Object,
-    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, faceFlapBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0, chessWins: 0, chessLosses: 0, chessDraws: 0, farkleWins: 0, farkleLosses: 0 },
+    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, faceFlapBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0, chessWins: 0, chessLosses: 0, chessDraws: 0, farkleWins: 0, farkleLosses: 0, demonRunBest: 0 },
     onChange: () => refreshAll()
   });
 
@@ -1464,7 +1465,7 @@ function updateHeader() {
 
   if (state.app === "arcade") {
     back.hidden = false;
-    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", faceflap: "Face Flap", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop", chess: "Chess", farkle: "Farkle" };
+    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", faceflap: "Face Flap", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop", chess: "Chess", farkle: "Farkle", demonrun: "Demon Run" };
     title.textContent = arcadeTitles[state.arcadeGame] || "Arcade";
     subtitle.textContent = state.arcadeGame === "menu" ? "Pick a game" : "Cellphone games";
     return;
@@ -6257,7 +6258,8 @@ function getArcadeStats() {
     chessLosses: Number(raw.chessLosses || 0),
     chessDraws: Number(raw.chessDraws || 0),
     farkleWins: Number(raw.farkleWins || 0),
-    farkleLosses: Number(raw.farkleLosses || 0)
+    farkleLosses: Number(raw.farkleLosses || 0),
+    demonRunBest: Number(raw.demonRunBest || 0)
   };
 }
 
@@ -6315,13 +6317,17 @@ function renderArcadeView() {
     renderFarkleGame(container);
     return;
   }
+  if (state.arcadeGame === 'demonrun') {
+    renderDemonRunGame(container);
+    return;
+  }
   renderArcadeMenu(container);
 }
 
 function renderArcadeMenu(container) {
   const intro = document.createElement('div');
   intro.className = 'fc-arcade-intro';
-  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Ten quick games for downtime between scenes.</span></div>';
+  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Eleven quick games for downtime between scenes.</span></div>';
   container.appendChild(intro);
 
   const stats = getArcadeStats();
@@ -6468,7 +6474,21 @@ function renderArcadeMenu(container) {
     renderPhone();
   });
 
-  grid.append(snake, ttt, mines, runner, faceFlap, guess, stack, blockDrop, chess, farkle);
+  const demonRun = document.createElement('button');
+  demonRun.type = 'button';
+  demonRun.className = 'fc-arcade-game-card';
+  demonRun.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-demonrun"><i class="fa-solid fa-skull"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Demon Run</strong><small>Best score: ${stats.demonRunBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  demonRun.addEventListener('click', () => {
+    state.arcadeGame = 'demonrun';
+    if (!state.demonRun.map.length || state.demonRun.gameOver || state.demonRun.completed) resetDemonRunGame();
+    renderPhone();
+  });
+
+  grid.append(snake, ttt, mines, runner, faceFlap, guess, stack, blockDrop, chess, farkle, demonRun);
   container.appendChild(grid);
 }
 
@@ -6478,6 +6498,7 @@ function pauseArcadeActionGames() {
   pauseFaceFlapGame();
   pauseStackItGame();
   pauseBlockDropGame();
+  pauseDemonRunGame();
   stopChessAi();
   stopFarklePhoneTimer();
 }
@@ -6684,6 +6705,35 @@ function onArcadeKeydown(event) {
   if (state.arcadeGame === 'runner' && [' ', 'ArrowUp', 'w', 'W'].includes(event.key)) {
     event.preventDefault();
     jumpRunner();
+    return;
+  }
+
+  if (state.arcadeGame === 'faceflap') {
+    if ([' ', 'ArrowUp', 'w', 'W'].includes(event.key)) {
+      event.preventDefault();
+      flapFaceFlap();
+    } else if (event.key === 'p' || event.key === 'P') {
+      event.preventDefault();
+      if (state.faceFlap.running) pauseFaceFlapGame();
+      else startFaceFlapGame();
+    }
+    return;
+  }
+
+  if (state.arcadeGame === 'demonrun') {
+    const key = event.key;
+    if (['ArrowUp', 'w', 'W'].includes(key)) { event.preventDefault(); demonRunMove(1, 0); }
+    else if (['ArrowDown', 's', 'S'].includes(key)) { event.preventDefault(); demonRunMove(-1, 0); }
+    else if (['ArrowLeft', 'q', 'Q'].includes(key)) { event.preventDefault(); demonRunTurn(-1); }
+    else if (['ArrowRight', 'e', 'E'].includes(key)) { event.preventDefault(); demonRunTurn(1); }
+    else if (['a', 'A'].includes(key)) { event.preventDefault(); demonRunMove(0, -1); }
+    else if (['d', 'D'].includes(key)) { event.preventDefault(); demonRunMove(0, 1); }
+    else if (key === ' ') { event.preventDefault(); demonRunShoot(); }
+    else if (key === 'p' || key === 'P') {
+      event.preventDefault();
+      if (state.demonRun.running) pauseDemonRunGame();
+      else startDemonRunGame();
+    }
     return;
   }
 
@@ -7159,7 +7209,7 @@ const FACE_FLAP_TICK_MS = 33;
 const FACE_FLAP_BIRD_X = 58;
 const FACE_FLAP_BIRD_SIZE = 42;
 const FACE_FLAP_PIPE_WIDTH = 42;
-const FACE_FLAP_GAP = 92;
+const FACE_FLAP_GAP = 108;
 
 function resetFaceFlapGame() {
   stopFaceFlapInterval();
@@ -7895,6 +7945,513 @@ function updateBlockDropBoard() {
 
 
 // ---------------------------
+// Demon Run
+const DEMON_RUN_WIDTH = 220;
+const DEMON_RUN_HEIGHT = 190;
+const DEMON_RUN_FOV = Math.PI / 3;
+const DEMON_RUN_TICK_MS = 220;
+
+const DEMON_RUN_LEVELS = [
+  {
+    map: [
+      '1111111111',
+      '1000000001',
+      '1011101101',
+      '1000100001',
+      '1010101111',
+      '1010000001',
+      '1011110101',
+      '1000000101',
+      '1001100001',
+      '1111111111'
+    ],
+    start: [1.5, 1.5, 0],
+    exit: [8.4, 8.4],
+    enemies: [[7.4,1.6],[5.5,5.5],[6.4,7.4]],
+    pickups: [['ammo',3.5,1.5],['health',5.5,7.5]]
+  },
+  {
+    map: [
+      '1111111111',
+      '1000000001',
+      '1010111101',
+      '1010000101',
+      '1011100101',
+      '1000100001',
+      '1110101111',
+      '1000000001',
+      '1001110001',
+      '1111111111'
+    ],
+    start: [1.5,8.5,-Math.PI/2],
+    exit: [8.4,1.5],
+    enemies: [[2.5,5.5],[5.5,5.5],[7.5,7.5],[8.4,2.5]],
+    pickups: [['health',1.5,4.5],['ammo',5.5,1.5],['ammo',8.5,5.5]]
+  },
+  {
+    map: [
+      '1111111111',
+      '1000000001',
+      '1011110101',
+      '1000010101',
+      '1111010101',
+      '1000010001',
+      '1011111101',
+      '1000000001',
+      '1011011001',
+      '1111111111'
+    ],
+    start: [1.5,1.5,0],
+    exit: [8.4,8.4],
+    enemies: [[7.5,1.5],[4.5,3.5],[2.5,5.5],[6.5,7.5],[8.2,6.4]],
+    pickups: [['ammo',4.5,1.5],['health',1.5,7.5],['ammo',7.5,7.5]]
+  }
+];
+
+function resetDemonRunGame() {
+  stopDemonRunInterval();
+  state.demonRun.level = 0;
+  state.demonRun.score = 0;
+  state.demonRun.gameOver = false;
+  state.demonRun.completed = false;
+  state.demonRun.running = false;
+  state.demonRun.paused = false;
+  state.demonRun.damageFlash = 0;
+  loadDemonRunLevel(0, true);
+  state.demonRun.message = 'Press Start or move to begin.';
+}
+
+function loadDemonRunLevel(index, fullReset = false) {
+  const level = DEMON_RUN_LEVELS[index];
+  if (!level) return;
+  state.demonRun.level = index;
+  state.demonRun.map = level.map.slice();
+  const [x, y, dir] = level.start;
+  const priorHealth = Number(state.demonRun.player?.health || 100);
+  const priorAmmo = Number(state.demonRun.player?.ammo || 12);
+  state.demonRun.player = {
+    x,
+    y,
+    dir,
+    health: fullReset ? 100 : Math.min(100, Math.max(45, priorHealth + 20)),
+    ammo: fullReset ? 12 : Math.max(8, priorAmmo + 5)
+  };
+  state.demonRun.enemies = level.enemies.map(([ex,ey], i) => ({ id: `${index}-${i}`, x: ex, y: ey, health: index === 2 ? 3 : 2, cooldown: 0, alive: true }));
+  state.demonRun.pickups = level.pickups.map(([type,px,py], i) => ({ id: `${index}-p${i}`, type, x: px, y: py, taken: false }));
+  state.demonRun.exit = { x: level.exit[0], y: level.exit[1] };
+  state.demonRun.message = `Level ${index + 1}: clear the creatures, then find the exit.`;
+}
+
+function startDemonRunGame() {
+  if (state.demonRun.gameOver || state.demonRun.completed) resetDemonRunGame();
+  state.demonRun.running = true;
+  state.demonRun.paused = false;
+  stopDemonRunInterval();
+  state.demonRun.interval = setInterval(stepDemonRunEnemies, DEMON_RUN_TICK_MS);
+  renderDemonRunCanvas();
+}
+
+function pauseDemonRunGame() {
+  if (!state.demonRun.running) return;
+  state.demonRun.running = false;
+  state.demonRun.paused = !state.demonRun.gameOver && !state.demonRun.completed;
+  stopDemonRunInterval();
+  if (state.phoneOpen && state.app === 'arcade' && state.arcadeGame === 'demonrun' && !state.call) updateDemonRunHud();
+}
+
+function stopDemonRunInterval() {
+  if (state.demonRun.interval) {
+    clearInterval(state.demonRun.interval);
+    state.demonRun.interval = null;
+  }
+}
+
+function demonRunEnsureStarted() {
+  if (!state.demonRun.running && !state.demonRun.gameOver && !state.demonRun.completed) startDemonRunGame();
+}
+
+function demonRunCellIsWall(x, y) {
+  const row = Math.floor(y);
+  const col = Math.floor(x);
+  if (row < 0 || col < 0 || row >= state.demonRun.map.length || col >= state.demonRun.map[0].length) return true;
+  return state.demonRun.map[row][col] !== '0';
+}
+
+function demonRunCanStand(x, y, radius = 0.17) {
+  return !demonRunCellIsWall(x - radius, y - radius)
+    && !demonRunCellIsWall(x + radius, y - radius)
+    && !demonRunCellIsWall(x - radius, y + radius)
+    && !demonRunCellIsWall(x + radius, y + radius);
+}
+
+function normalizeDemonRunAngle(angle) {
+  while (angle > Math.PI) angle -= Math.PI * 2;
+  while (angle < -Math.PI) angle += Math.PI * 2;
+  return angle;
+}
+
+function demonRunMove(forward, strafe) {
+  if (state.demonRun.gameOver || state.demonRun.completed) return;
+  demonRunEnsureStarted();
+  const p = state.demonRun.player;
+  const step = 0.22;
+  const dx = Math.cos(p.dir) * forward * step + Math.cos(p.dir + Math.PI / 2) * strafe * step;
+  const dy = Math.sin(p.dir) * forward * step + Math.sin(p.dir + Math.PI / 2) * strafe * step;
+  if (demonRunCanStand(p.x + dx, p.y)) p.x += dx;
+  if (demonRunCanStand(p.x, p.y + dy)) p.y += dy;
+  collectDemonRunPickups();
+  checkDemonRunExit();
+  renderDemonRunCanvas();
+}
+
+function demonRunTurn(direction) {
+  if (state.demonRun.gameOver || state.demonRun.completed) return;
+  demonRunEnsureStarted();
+  state.demonRun.player.dir = normalizeDemonRunAngle(state.demonRun.player.dir + direction * 0.18);
+  renderDemonRunCanvas();
+}
+
+function demonRunLineOfSight(x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.ceil(dist / 0.06));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (demonRunCellIsWall(x1 + dx * t, y1 + dy * t)) return false;
+  }
+  return true;
+}
+
+function demonRunShoot() {
+  if (state.demonRun.gameOver || state.demonRun.completed) return;
+  demonRunEnsureStarted();
+  const p = state.demonRun.player;
+  if (p.ammo <= 0) {
+    state.demonRun.message = 'Click. Out of ammo.';
+    updateDemonRunHud();
+    return;
+  }
+  p.ammo -= 1;
+  let target = null;
+  let bestDistance = Infinity;
+  for (const enemy of state.demonRun.enemies) {
+    if (!enemy.alive) continue;
+    const dx = enemy.x - p.x;
+    const dy = enemy.y - p.y;
+    const distance = Math.hypot(dx, dy);
+    const angle = normalizeDemonRunAngle(Math.atan2(dy, dx) - p.dir);
+    const hitWindow = 0.055 + 0.09 / Math.max(0.8, distance);
+    if (Math.abs(angle) <= hitWindow && distance < bestDistance && demonRunLineOfSight(p.x, p.y, enemy.x, enemy.y)) {
+      target = enemy;
+      bestDistance = distance;
+    }
+  }
+  if (target) {
+    target.health -= 1;
+    state.demonRun.score += 20;
+    if (target.health <= 0) {
+      target.alive = false;
+      state.demonRun.score += 100;
+      state.demonRun.message = state.demonRun.enemies.some((e) => e.alive) ? 'Creature down.' : 'Area clear. Find the green exit.';
+    } else {
+      state.demonRun.message = 'Hit!';
+    }
+  } else {
+    state.demonRun.message = 'Missed.';
+  }
+  renderDemonRunCanvas();
+}
+
+function collectDemonRunPickups() {
+  const p = state.demonRun.player;
+  for (const pickup of state.demonRun.pickups) {
+    if (pickup.taken || Math.hypot(pickup.x - p.x, pickup.y - p.y) > 0.38) continue;
+    pickup.taken = true;
+    if (pickup.type === 'health') {
+      p.health = Math.min(100, p.health + 30);
+      state.demonRun.message = 'Health restored.';
+    } else {
+      p.ammo += 8;
+      state.demonRun.message = 'Ammo collected.';
+    }
+    state.demonRun.score += 25;
+  }
+}
+
+function checkDemonRunExit() {
+  if (state.demonRun.enemies.some((e) => e.alive) || !state.demonRun.exit) return;
+  const p = state.demonRun.player;
+  if (Math.hypot(state.demonRun.exit.x - p.x, state.demonRun.exit.y - p.y) > 0.48) return;
+  state.demonRun.score += 250;
+  const next = state.demonRun.level + 1;
+  if (next >= DEMON_RUN_LEVELS.length) {
+    finishDemonRunGame(true);
+    return;
+  }
+  loadDemonRunLevel(next, false);
+  state.demonRun.message = `Level ${next + 1}. Keep moving.`;
+}
+
+function finishDemonRunGame(completed = false) {
+  stopDemonRunInterval();
+  state.demonRun.running = false;
+  state.demonRun.paused = false;
+  state.demonRun.completed = completed;
+  state.demonRun.gameOver = !completed;
+  if (completed) state.demonRun.score += Math.max(0, state.demonRun.player.health) * 5 + state.demonRun.player.ammo * 10;
+  const stats = getArcadeStats();
+  if (state.demonRun.score > stats.demonRunBest) void saveArcadeStats({ demonRunBest: state.demonRun.score });
+  state.demonRun.message = completed ? `Run complete — score ${state.demonRun.score}.` : `You were overwhelmed — score ${state.demonRun.score}.`;
+  renderDemonRunCanvas();
+}
+
+function stepDemonRunEnemies() {
+  if (!state.demonRun.running) return;
+  const p = state.demonRun.player;
+  for (const enemy of state.demonRun.enemies) {
+    if (!enemy.alive) continue;
+    if (enemy.cooldown > 0) enemy.cooldown -= 1;
+    const dx = p.x - enemy.x;
+    const dy = p.y - enemy.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance < 0.72 && enemy.cooldown <= 0) {
+      p.health -= state.demonRun.level === 2 ? 9 : 7;
+      enemy.cooldown = 3;
+      state.demonRun.damageFlash = 2;
+      state.demonRun.message = 'The creature hit you!';
+      if (p.health <= 0) {
+        p.health = 0;
+        finishDemonRunGame(false);
+        return;
+      }
+      continue;
+    }
+    if (distance < 5.5 && demonRunLineOfSight(enemy.x, enemy.y, p.x, p.y) && distance > 0.7) {
+      const speed = 0.09 + state.demonRun.level * 0.008;
+      const mx = dx / distance * speed;
+      const my = dy / distance * speed;
+      if (demonRunCanStand(enemy.x + mx, enemy.y, 0.14)) enemy.x += mx;
+      if (demonRunCanStand(enemy.x, enemy.y + my, 0.14)) enemy.y += my;
+    }
+  }
+  collectDemonRunPickups();
+  if (state.demonRun.damageFlash > 0) state.demonRun.damageFlash -= 1;
+  renderDemonRunCanvas();
+}
+
+function renderDemonRunGame(container) {
+  if (!state.demonRun.map.length) resetDemonRunGame();
+  const stats = getArcadeStats();
+  container.innerHTML = `
+    <div class="fc-demonrun-shell">
+      <div class="fc-arcade-scorebar fc-demonrun-scorebar">
+        <span>Level <strong class="fc-demonrun-level">${state.demonRun.level + 1}/3</strong></span>
+        <span>Score <strong class="fc-demonrun-score">${state.demonRun.score}</strong></span>
+        <span>Best <strong class="fc-demonrun-best">${Math.max(stats.demonRunBest, state.demonRun.score)}</strong></span>
+      </div>
+      <canvas class="fc-demonrun-canvas" width="220" height="190" aria-label="Demon Run first-person game view"></canvas>
+      <div class="fc-demonrun-hud">
+        <span><i class="fa-solid fa-heart"></i> <strong class="fc-demonrun-health">${state.demonRun.player.health}</strong></span>
+        <span><i class="fa-solid fa-crosshairs"></i> <strong class="fc-demonrun-ammo">${state.demonRun.player.ammo}</strong></span>
+        <span><i class="fa-solid fa-skull"></i> <strong class="fc-demonrun-enemies">${state.demonRun.enemies.filter((e) => e.alive).length}</strong></span>
+      </div>
+      <div class="fc-demonrun-message"></div>
+      <div class="fc-demonrun-move-controls">
+        <button type="button" data-action="turn-left" aria-label="Turn left"><i class="fa-solid fa-rotate-left"></i></button>
+        <button type="button" data-action="forward" aria-label="Move forward"><i class="fa-solid fa-arrow-up"></i></button>
+        <button type="button" data-action="turn-right" aria-label="Turn right"><i class="fa-solid fa-rotate-right"></i></button>
+        <button type="button" data-action="strafe-left" aria-label="Strafe left"><i class="fa-solid fa-arrow-left"></i></button>
+        <button type="button" data-action="back" aria-label="Move backward"><i class="fa-solid fa-arrow-down"></i></button>
+        <button type="button" data-action="strafe-right" aria-label="Strafe right"><i class="fa-solid fa-arrow-right"></i></button>
+      </div>
+      <div class="fc-demonrun-actions">
+        <button type="button" class="fc-arcade-primary fc-demonrun-fire"><i class="fa-solid fa-crosshairs"></i> FIRE</button>
+        <button type="button" class="fc-arcade-secondary fc-demonrun-pause"><i class="fa-solid fa-play"></i> Start</button>
+        <button type="button" class="fc-arcade-secondary fc-demonrun-new"><i class="fa-solid fa-rotate-right"></i> New Run</button>
+      </div>
+      <div class="fc-demonrun-help">W/S move · A/D strafe · arrows or Q/E turn · Space fires</div>
+    </div>
+  `;
+  container.querySelector('[data-action="turn-left"]')?.addEventListener('click', () => demonRunTurn(-1));
+  container.querySelector('[data-action="turn-right"]')?.addEventListener('click', () => demonRunTurn(1));
+  container.querySelector('[data-action="forward"]')?.addEventListener('click', () => demonRunMove(1,0));
+  container.querySelector('[data-action="back"]')?.addEventListener('click', () => demonRunMove(-1,0));
+  container.querySelector('[data-action="strafe-left"]')?.addEventListener('click', () => demonRunMove(0,-1));
+  container.querySelector('[data-action="strafe-right"]')?.addEventListener('click', () => demonRunMove(0,1));
+  container.querySelector('.fc-demonrun-canvas')?.addEventListener('click', demonRunShoot);
+  container.querySelector('.fc-demonrun-fire')?.addEventListener('click', demonRunShoot);
+  container.querySelector('.fc-demonrun-pause')?.addEventListener('click', () => {
+    if (state.demonRun.running) pauseDemonRunGame();
+    else startDemonRunGame();
+  });
+  container.querySelector('.fc-demonrun-new')?.addEventListener('click', () => {
+    resetDemonRunGame();
+    renderDemonRunCanvas();
+  });
+  renderDemonRunCanvas();
+}
+
+function demonRunRayDistance(angle, maxDistance = 16) {
+  const p = state.demonRun.player;
+  const step = 0.025;
+  for (let distance = 0; distance < maxDistance; distance += step) {
+    const x = p.x + Math.cos(angle) * distance;
+    const y = p.y + Math.sin(angle) * distance;
+    if (demonRunCellIsWall(x, y)) return distance;
+  }
+  return maxDistance;
+}
+
+function demonRunProjectObject(ctx, object, type, depthBuffer) {
+  const p = state.demonRun.player;
+  const dx = object.x - p.x;
+  const dy = object.y - p.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 0.05) return;
+  const angle = normalizeDemonRunAngle(Math.atan2(dy, dx) - p.dir);
+  if (Math.abs(angle) > DEMON_RUN_FOV * 0.62) return;
+  if (!demonRunLineOfSight(p.x, p.y, object.x, object.y)) return;
+  const corrected = distance * Math.cos(angle);
+  const screenX = DEMON_RUN_WIDTH / 2 + Math.tan(angle) / Math.tan(DEMON_RUN_FOV / 2) * (DEMON_RUN_WIDTH / 2);
+  const size = Math.max(10, Math.min(type === 'enemy' ? 88 : 48, (type === 'enemy' ? 82 : 48) / Math.max(0.5, corrected)));
+  const col = Math.max(0, Math.min(depthBuffer.length - 1, Math.floor(screenX / 2)));
+  if (corrected > depthBuffer[col] + 0.1) return;
+  const baseY = DEMON_RUN_HEIGHT / 2 + Math.min(50, 55 / Math.max(0.7, corrected));
+  ctx.save();
+  if (type === 'enemy') {
+    const x = screenX - size / 2;
+    const y = baseY - size;
+    ctx.fillStyle = '#7d1f25';
+    ctx.beginPath(); ctx.arc(screenX, y + size * 0.58, size * 0.34, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d14a3d';
+    ctx.beginPath();
+    ctx.moveTo(x + size * 0.2, y + size * 0.4); ctx.lineTo(x + size * 0.32, y); ctx.lineTo(x + size * 0.45, y + size * 0.34); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + size * 0.8, y + size * 0.4); ctx.lineTo(x + size * 0.68, y); ctx.lineTo(x + size * 0.55, y + size * 0.34); ctx.fill();
+    ctx.fillStyle = '#ffdd62';
+    ctx.fillRect(screenX - size * 0.16, y + size * 0.52, Math.max(2,size * 0.08), Math.max(2,size * 0.05));
+    ctx.fillRect(screenX + size * 0.08, y + size * 0.52, Math.max(2,size * 0.08), Math.max(2,size * 0.05));
+    ctx.fillStyle = '#461114';
+    ctx.fillRect(screenX - size * 0.22, y + size * 0.75, size * 0.44, Math.max(2,size * 0.07));
+  } else if (type === 'health') {
+    ctx.fillStyle = '#e7edf3';
+    ctx.fillRect(screenX - size * 0.3, baseY - size * 0.6, size * 0.6, size * 0.6);
+    ctx.fillStyle = '#d74444';
+    ctx.fillRect(screenX - size * 0.08, baseY - size * 0.52, size * 0.16, size * 0.44);
+    ctx.fillRect(screenX - size * 0.22, baseY - size * 0.38, size * 0.44, size * 0.16);
+  } else if (type === 'ammo') {
+    ctx.fillStyle = '#c7a64c';
+    ctx.fillRect(screenX - size * 0.28, baseY - size * 0.55, size * 0.56, size * 0.5);
+    ctx.fillStyle = '#56451d';
+    ctx.fillRect(screenX - size * 0.18, baseY - size * 0.46, size * 0.1, size * 0.3);
+    ctx.fillRect(screenX + size * 0.08, baseY - size * 0.46, size * 0.1, size * 0.3);
+  } else if (type === 'exit') {
+    ctx.fillStyle = 'rgba(73, 230, 133, .8)';
+    ctx.fillRect(screenX - size * 0.28, baseY - size * 1.1, size * 0.56, size * 1.1);
+    ctx.strokeStyle = '#c9ffe0';
+    ctx.lineWidth = Math.max(1, size * 0.04);
+    ctx.strokeRect(screenX - size * 0.28, baseY - size * 1.1, size * 0.56, size * 1.1);
+  }
+  ctx.restore();
+}
+
+function renderDemonRunCanvas() {
+  const canvas = state.root?.querySelector('.fc-demonrun-canvas');
+  if (!canvas || !state.demonRun.map.length) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const p = state.demonRun.player;
+  ctx.clearRect(0,0,DEMON_RUN_WIDTH,DEMON_RUN_HEIGHT);
+  const sky = ctx.createLinearGradient(0,0,0,DEMON_RUN_HEIGHT/2);
+  sky.addColorStop(0,'#241725'); sky.addColorStop(1,'#4c2932');
+  ctx.fillStyle = sky; ctx.fillRect(0,0,DEMON_RUN_WIDTH,DEMON_RUN_HEIGHT/2);
+  const floor = ctx.createLinearGradient(0,DEMON_RUN_HEIGHT/2,0,DEMON_RUN_HEIGHT);
+  floor.addColorStop(0,'#353335'); floor.addColorStop(1,'#111214');
+  ctx.fillStyle = floor; ctx.fillRect(0,DEMON_RUN_HEIGHT/2,DEMON_RUN_WIDTH,DEMON_RUN_HEIGHT/2);
+
+  const depthBuffer = [];
+  const columnWidth = 2;
+  const columns = DEMON_RUN_WIDTH / columnWidth;
+  for (let i=0; i<columns; i++) {
+    const camera = (i / columns) - 0.5;
+    const rayAngle = p.dir + camera * DEMON_RUN_FOV;
+    const rawDistance = demonRunRayDistance(rayAngle);
+    const distance = Math.max(0.01, rawDistance * Math.cos(rayAngle - p.dir));
+    depthBuffer.push(distance);
+    const wallHeight = Math.min(DEMON_RUN_HEIGHT * 1.5, 145 / distance);
+    const top = (DEMON_RUN_HEIGHT - wallHeight) / 2;
+    const shade = Math.max(38, Math.min(150, 175 - distance * 18));
+    ctx.fillStyle = `rgb(${shade},${Math.round(shade * 0.62)},${Math.round(shade * 0.52)})`;
+    ctx.fillRect(i * columnWidth, top, columnWidth + 1, wallHeight);
+    if (i % 4 === 0) {
+      ctx.fillStyle = 'rgba(0,0,0,.08)';
+      ctx.fillRect(i * columnWidth, top, 1, wallHeight);
+    }
+  }
+
+  const objects = [];
+  for (const enemy of state.demonRun.enemies) if (enemy.alive) objects.push({ object: enemy, type: 'enemy' });
+  for (const pickup of state.demonRun.pickups) if (!pickup.taken) objects.push({ object: pickup, type: pickup.type });
+  if (!state.demonRun.enemies.some((e) => e.alive) && state.demonRun.exit) objects.push({ object: state.demonRun.exit, type: 'exit' });
+  objects.sort((a,b) => Math.hypot(b.object.x-p.x,b.object.y-p.y) - Math.hypot(a.object.x-p.x,a.object.y-p.y));
+  for (const item of objects) demonRunProjectObject(ctx, item.object, item.type, depthBuffer);
+
+  // Reticle and simple weapon silhouette.
+  ctx.strokeStyle = 'rgba(255,255,255,.65)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(DEMON_RUN_WIDTH/2-6, DEMON_RUN_HEIGHT/2); ctx.lineTo(DEMON_RUN_WIDTH/2-2, DEMON_RUN_HEIGHT/2);
+  ctx.moveTo(DEMON_RUN_WIDTH/2+2, DEMON_RUN_HEIGHT/2); ctx.lineTo(DEMON_RUN_WIDTH/2+6, DEMON_RUN_HEIGHT/2);
+  ctx.moveTo(DEMON_RUN_WIDTH/2, DEMON_RUN_HEIGHT/2-6); ctx.lineTo(DEMON_RUN_WIDTH/2, DEMON_RUN_HEIGHT/2-2);
+  ctx.moveTo(DEMON_RUN_WIDTH/2, DEMON_RUN_HEIGHT/2+2); ctx.lineTo(DEMON_RUN_WIDTH/2, DEMON_RUN_HEIGHT/2+6);
+  ctx.stroke();
+  ctx.fillStyle = '#202327';
+  ctx.beginPath();
+  ctx.moveTo(DEMON_RUN_WIDTH/2-26, DEMON_RUN_HEIGHT); ctx.lineTo(DEMON_RUN_WIDTH/2-14, DEMON_RUN_HEIGHT-30); ctx.lineTo(DEMON_RUN_WIDTH/2+14, DEMON_RUN_HEIGHT-30); ctx.lineTo(DEMON_RUN_WIDTH/2+26, DEMON_RUN_HEIGHT); ctx.fill();
+  ctx.fillStyle = '#51565e'; ctx.fillRect(DEMON_RUN_WIDTH/2-8, DEMON_RUN_HEIGHT-40, 16, 24);
+
+  if (state.demonRun.damageFlash > 0) {
+    ctx.fillStyle = 'rgba(190,25,25,.22)';
+    ctx.fillRect(0,0,DEMON_RUN_WIDTH,DEMON_RUN_HEIGHT);
+  }
+  if (state.demonRun.paused || state.demonRun.gameOver || state.demonRun.completed || !state.demonRun.running) {
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(0,0,DEMON_RUN_WIDTH,DEMON_RUN_HEIGHT);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '700 14px sans-serif';
+    const label = state.demonRun.completed ? 'RUN COMPLETE' : state.demonRun.gameOver ? 'GAME OVER' : state.demonRun.paused ? 'PAUSED' : 'DEMON RUN';
+    ctx.fillText(label, DEMON_RUN_WIDTH/2, DEMON_RUN_HEIGHT/2-6);
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.82)';
+    if (!state.demonRun.gameOver && !state.demonRun.completed) ctx.fillText('Move or press Start', DEMON_RUN_WIDTH/2, DEMON_RUN_HEIGHT/2+12);
+  }
+  updateDemonRunHud();
+}
+
+function updateDemonRunHud() {
+  const root = state.root;
+  if (!root) return;
+  const health = root.querySelector('.fc-demonrun-health');
+  const ammo = root.querySelector('.fc-demonrun-ammo');
+  const enemies = root.querySelector('.fc-demonrun-enemies');
+  const score = root.querySelector('.fc-demonrun-score');
+  const best = root.querySelector('.fc-demonrun-best');
+  const level = root.querySelector('.fc-demonrun-level');
+  const message = root.querySelector('.fc-demonrun-message');
+  const pause = root.querySelector('.fc-demonrun-pause');
+  if (health) health.textContent = String(state.demonRun.player.health);
+  if (ammo) ammo.textContent = String(state.demonRun.player.ammo);
+  if (enemies) enemies.textContent = String(state.demonRun.enemies.filter((e) => e.alive).length);
+  if (score) score.textContent = String(state.demonRun.score);
+  if (best) best.textContent = String(Math.max(getArcadeStats().demonRunBest, state.demonRun.score));
+  if (level) level.textContent = `${state.demonRun.level + 1}/3`;
+  if (message) message.textContent = state.demonRun.message;
+  if (pause) {
+    if (state.demonRun.running) pause.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+    else if (state.demonRun.gameOver || state.demonRun.completed) pause.innerHTML = '<i class="fa-solid fa-play"></i> Restart';
+    else pause.innerHTML = '<i class="fa-solid fa-play"></i> Start';
+  }
+}
+
 // Chess
 // ---------------------------
 

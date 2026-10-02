@@ -5026,6 +5026,7 @@
 /* v2.3.0 Arcade expansion: Chess + Farkle */
 .fc-arcade-game-icon-chess { background: linear-gradient(145deg, #6d6256, #332f2a); }
 .fc-arcade-game-icon-farkle { background: linear-gradient(145deg, #d05252, #842f3b); }
+.fc-arcade-game-icon-demonrun { background: linear-gradient(145deg, #7f2828, #27151a); }
 
 .fc-chess-shell,
 .fc-farkle-shell {
@@ -5470,3 +5471,85 @@
   gap: 7px;
 }
 .fc-faceflap-controls button { min-width: 0; }
+
+
+/* Demon Run */
+.fc-demonrun-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.fc-demonrun-scorebar {
+  grid-template-columns: repeat(3, 1fr);
+}
+.fc-demonrun-canvas {
+  width: 220px;
+  height: 190px;
+  align-self: center;
+  display: block;
+  image-rendering: pixelated;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: #171218;
+  box-shadow: 0 10px 22px rgba(0,0,0,.22);
+  cursor: crosshair;
+}
+.fc-demonrun-hud {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.fc-demonrun-hud span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 4px;
+  border-radius: 9px;
+  background: rgba(0,0,0,.22);
+  border: 1px solid rgba(255,255,255,.08);
+  color: rgba(255,255,255,.9);
+  font-size: 10px;
+}
+.fc-demonrun-hud span:first-child i { color: #e26464; }
+.fc-demonrun-hud span:nth-child(2) i { color: #d8c366; }
+.fc-demonrun-hud span:nth-child(3) i { color: #d98166; }
+.fc-demonrun-message {
+  min-height: 28px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  background: rgba(0,0,0,.18);
+  color: rgba(255,255,255,.82);
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: center;
+}
+.fc-demonrun-move-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.fc-demonrun-move-controls button {
+  min-height: 34px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.09);
+  color: #fff;
+  cursor: pointer;
+}
+.fc-demonrun-move-controls button:hover { background: rgba(255,255,255,.14); }
+.fc-demonrun-actions {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 6px;
+}
+.fc-demonrun-actions button { min-width: 0; }
+.fc-demonrun-fire {
+  background: linear-gradient(145deg, #a73535, #681d24) !important;
+}
+.fc-demonrun-help {
+  color: rgba(255,255,255,.48);
+  font-size: 8px;
+  line-height: 1.3;
+  text-align: center;
+}
