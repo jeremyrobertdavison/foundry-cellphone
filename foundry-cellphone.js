@@ -15,6 +15,7 @@ const PHONE_SCALE_SETTING = "phoneScalePercent";
 const PHONE_TEXT_SCALE_SETTING = "phoneTextScalePercent";
 const PHONE_TEXT_FOLLOW_SIZE_SETTING = "phoneTextFollowsSize";
 const POCKET_PET_SETTING = "pocketPetState";
+const PAINT_CANVAS_SETTING = "paintCanvasData";
 const SOCKET_NAME = `module.${MODULE_ID}`;
 const LEGACY_GROUP_ID = "party";
 const MAX_RENDERED_MESSAGES = 300;
@@ -94,6 +95,13 @@ const state = {
   chess: { board: [], turn: "w", status: "playing", selected: null, legalTargets: [], message: "Your move", aiTimer: null },
   farkle: { playerScore: 0, phoneScore: 0, turnScore: 0, diceCount: 6, dice: [], selected: new Set(), status: "player", message: "Roll the dice to start.", rolled: false, phoneTimer: null },
   demonRun: { level: 0, map: [], player: { x: 1.5, y: 1.5, dir: 0, health: 100, ammo: 12 }, enemies: [], pickups: [], exit: null, score: 0, running: false, paused: false, gameOver: false, completed: false, interval: null, message: "Press Start or move to begin.", damageFlash: 0 },
+  breakout: { running: false, paused: false, gameOver: false, interval: null, paddleX: 82, ballX: 110, ballY: 222, vx: 2.4, vy: -2.8, bricks: [], score: 0, lives: 3 },
+  pong: { running: false, paused: false, gameOver: false, interval: null, playerY: 115, aiY: 115, ballX: 110, ballY: 150, vx: 2.6, vy: 1.8, playerScore: 0, aiScore: 0 },
+  digDeep: { grid: [], player: { x: 1, y: 1 }, enemies: [], score: 0, status: "ready", steps: 0, message: "Dig tunnels and clear the creatures." },
+  checkers: { board: [], turn: "r", selected: null, legalTargets: [], forcedPiece: null, status: "playing", message: "Your move", aiTimer: null },
+  blackjack: { deck: [], player: [], dealer: [], status: "playing", message: "Hit or stand." },
+  solitaire: { stock: [], waste: [], tableau: [], foundations: { H: [], D: [], C: [], S: [] }, selection: null, status: "playing", moves: 0, message: "Build each suit from Ace to King." },
+  paint: { tool: "brush", color: "#1f2937", size: 6, drawing: false, lastX: 0, lastY: 0, saveTimer: null },
   musicLastVolume: 0.7,
   musicVolumeTimer: null,
   musicLastAmbientVolume: 0.7,
@@ -177,7 +185,7 @@ Hooks.once("init", () => {
     scope: "client",
     config: false,
     type: Object,
-    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, faceFlapBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0, chessWins: 0, chessLosses: 0, chessDraws: 0, farkleWins: 0, farkleLosses: 0, demonRunBest: 0 },
+    default: { snakeBest: 0, ticTacToeWins: 0, ticTacToeLosses: 0, ticTacToeDraws: 0, minesweeperWins: 0, runnerBest: 0, faceFlapBest: 0, guessNumberWins: 0, guessNumberBestAttempts: 0, stackItBest: 0, blockDropBest: 0, chessWins: 0, chessLosses: 0, chessDraws: 0, farkleWins: 0, farkleLosses: 0, demonRunBest: 0, breakoutBest: 0, pongWins: 0, pongLosses: 0, digDeepBest: 0, checkersWins: 0, checkersLosses: 0, blackjackWins: 0, blackjackLosses: 0, blackjackPushes: 0, solitaireWins: 0, solitaireBestMoves: 0 },
     onChange: () => refreshAll()
   });
 
@@ -237,6 +245,15 @@ Hooks.once("init", () => {
     config: false,
     type: Object,
     default: {}
+  });
+
+  game.settings.register(MODULE_ID, PAINT_CANVAS_SETTING, {
+    name: "Paint Canvas",
+    hint: "Personal saved drawing for the cellphone Paint app.",
+    scope: "client",
+    config: false,
+    type: String,
+    default: ""
   });
 });
 
@@ -373,13 +390,18 @@ for (const hookName of ["createPlaylistSound", "updatePlaylistSound", "deletePla
 }
 
 function addCellphoneToolbarTool(controls) {
-  const makeV13Tool = (order) => ({
+  const makeModernTool = (order) => ({
     name: PHONE_TOOL_NAME,
     title: "Open Cellphone",
     icon: "fa-solid fa-mobile-screen-button",
     order,
     button: true,
     visible: true,
+    // Foundry V14 distinguishes interaction, control, and creation tools.
+    // This is a pure toolbar button and should never become an active canvas tool.
+    interaction: false,
+    control: false,
+    creation: false,
     onChange: () => togglePhone()
   });
 
@@ -394,14 +416,14 @@ function addCellphoneToolbarTool(controls) {
     onClick: () => togglePhone()
   });
 
-  // Foundry v13+ exposes SceneControls as a record whose tools are also records.
+  // Foundry v13/v14 expose SceneControls as a record whose tools are also records.
   if (!Array.isArray(controls)) {
     for (const control of Object.values(controls ?? {})) {
       if (!control?.tools || typeof control.tools !== "object" || Array.isArray(control.tools)) continue;
       if (control.tools[PHONE_TOOL_NAME]) continue;
       const orders = Object.values(control.tools).map((tool) => Number(tool?.order ?? 0)).filter(Number.isFinite);
       const order = (orders.length ? Math.max(...orders) : 0) + 10;
-      control.tools[PHONE_TOOL_NAME] = makeV13Tool(order);
+      control.tools[PHONE_TOOL_NAME] = makeModernTool(order);
     }
     return;
   }
@@ -513,6 +535,10 @@ function buildPhone() {
               <span class="fc-app-symbol fc-app-symbol-pocketpet"><i class="fa-solid fa-paw"></i></span>
               <span class="fc-app-label">Pocket Pet</span>
             </button>
+            <button class="fc-app-icon fc-app-icon-paint" type="button" data-app="paint">
+              <span class="fc-app-symbol fc-app-symbol-paint"><i class="fa-solid fa-palette"></i></span>
+              <span class="fc-app-label">Paint</span>
+            </button>
             <button class="fc-app-icon fc-app-icon-settings" type="button" data-app="settings">
               <span class="fc-app-symbol fc-app-symbol-settings"><i class="fa-solid fa-gear"></i></span>
               <span class="fc-app-label">Settings</span>
@@ -623,6 +649,10 @@ function buildPhone() {
             <div class="fc-pocketpet-content"></div>
           </section>
 
+          <section class="fc-paint-view" hidden>
+            <div class="fc-paint-content"></div>
+          </section>
+
           <section class="fc-settings-view" hidden>
             <div class="fc-settings-content"></div>
           </section>
@@ -695,7 +725,7 @@ function openPhone() {
 }
 
 function openApp(app) {
-  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo', 'music', 'pocketpet', 'settings'].includes(app)) return;
+  if (!['messages', 'missions', 'friendpage', 'browser', 'notes', 'news', 'arcade', 'maps', 'mondo', 'music', 'pocketpet', 'paint', 'settings'].includes(app)) return;
   stopTyping();
   state.app = app;
   if (app === 'messages') {
@@ -813,6 +843,11 @@ function goBack() {
 
   if (state.app === "pocketpet") {
     stopPocketPetTimer();
+    goHome();
+    return;
+  }
+
+  if (state.app === "paint") {
     goHome();
     return;
   }
@@ -1293,6 +1328,7 @@ function renderPhone() {
   const mondoView = state.root.querySelector(".fc-mondo-view");
   const musicView = state.root.querySelector(".fc-music-view");
   const pocketPetView = state.root.querySelector(".fc-pocketpet-view");
+  const paintView = state.root.querySelector(".fc-paint-view");
   const settingsView = state.root.querySelector(".fc-settings-view");
   const composer = state.root.querySelector(".fc-composer");
   const inCallUi = Boolean(state.call);
@@ -1314,6 +1350,7 @@ function renderPhone() {
   mondoView.hidden = true;
   musicView.hidden = true;
   pocketPetView.hidden = true;
+  paintView.hidden = true;
   settingsView.hidden = true;
 
   if (inCallUi) {
@@ -1397,6 +1434,13 @@ function renderPhone() {
     return;
   }
 
+  if (state.app === "paint") {
+    paintView.hidden = false;
+    renderPaintView();
+    updateBadges();
+    return;
+  }
+
   if (state.app === "settings") {
     settingsView.hidden = false;
     renderSettingsView();
@@ -1469,6 +1513,13 @@ function updateHeader() {
     return;
   }
 
+  if (state.app === "paint") {
+    back.hidden = false;
+    title.textContent = "Paint";
+    subtitle.textContent = "Draw something";
+    return;
+  }
+
   if (state.app === "settings") {
     back.hidden = false;
     title.textContent = "Settings";
@@ -1508,7 +1559,7 @@ function updateHeader() {
 
   if (state.app === "arcade") {
     back.hidden = false;
-    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", faceflap: "Face Flap", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop", chess: "Chess", farkle: "Farkle", demonrun: "Demon Run" };
+    const arcadeTitles = { snake: "Snake", tictactoe: "Tic Tac Toe", minesweeper: "Minesweeper", runner: "Runner", faceflap: "Face Flap", guessnumber: "Guess My Number", stackit: "Stack It", blockdrop: "Block Drop", chess: "Chess", farkle: "Farkle", demonrun: "Demon Run", breakout: "Brick Breaker", pong: "Paddle Duel", digdeep: "Dig Deep", checkers: "Checkers", blackjack: "Blackjack", solitaire: "Solitaire" };
     title.textContent = arcadeTitles[state.arcadeGame] || "Arcade";
     subtitle.textContent = state.arcadeGame === "menu" ? "Pick a game" : "Cellphone games";
     return;
@@ -6302,7 +6353,18 @@ function getArcadeStats() {
     chessDraws: Number(raw.chessDraws || 0),
     farkleWins: Number(raw.farkleWins || 0),
     farkleLosses: Number(raw.farkleLosses || 0),
-    demonRunBest: Number(raw.demonRunBest || 0)
+    demonRunBest: Number(raw.demonRunBest || 0),
+    breakoutBest: Number(raw.breakoutBest || 0),
+    pongWins: Number(raw.pongWins || 0),
+    pongLosses: Number(raw.pongLosses || 0),
+    digDeepBest: Number(raw.digDeepBest || 0),
+    checkersWins: Number(raw.checkersWins || 0),
+    checkersLosses: Number(raw.checkersLosses || 0),
+    blackjackWins: Number(raw.blackjackWins || 0),
+    blackjackLosses: Number(raw.blackjackLosses || 0),
+    blackjackPushes: Number(raw.blackjackPushes || 0),
+    solitaireWins: Number(raw.solitaireWins || 0),
+    solitaireBestMoves: Number(raw.solitaireBestMoves || 0)
   };
 }
 
@@ -6364,13 +6426,37 @@ function renderArcadeView() {
     renderDemonRunGame(container);
     return;
   }
+  if (state.arcadeGame === 'breakout') {
+    renderBreakoutGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'pong') {
+    renderPongGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'digdeep') {
+    renderDigDeepGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'checkers') {
+    renderCheckersGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'blackjack') {
+    renderBlackjackGame(container);
+    return;
+  }
+  if (state.arcadeGame === 'solitaire') {
+    renderSolitaireGame(container);
+    return;
+  }
   renderArcadeMenu(container);
 }
 
 function renderArcadeMenu(container) {
   const intro = document.createElement('div');
   intro.className = 'fc-arcade-intro';
-  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Eleven quick games for downtime between scenes.</span></div>';
+  intro.innerHTML = '<i class="fa-solid fa-gamepad"></i><div><strong>Arcade</strong><span>Seventeen quick games for downtime between scenes.</span></div>';
   container.appendChild(intro);
 
   const stats = getArcadeStats();
@@ -6531,7 +6617,92 @@ function renderArcadeMenu(container) {
     renderPhone();
   });
 
-  grid.append(snake, ttt, mines, runner, faceFlap, guess, stack, blockDrop, chess, farkle, demonRun);
+  const breakout = document.createElement('button');
+  breakout.type = 'button';
+  breakout.className = 'fc-arcade-game-card';
+  breakout.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-breakout"><i class="fa-solid fa-table-cells"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Brick Breaker</strong><small>Best score: ${stats.breakoutBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  breakout.addEventListener('click', () => {
+    state.arcadeGame = 'breakout';
+    if (!state.breakout.bricks.length || state.breakout.gameOver) resetBreakoutGame();
+    renderPhone();
+  });
+
+  const pong = document.createElement('button');
+  pong.type = 'button';
+  pong.className = 'fc-arcade-game-card';
+  pong.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-pong"><i class="fa-solid fa-table-tennis-paddle-ball"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Paddle Duel</strong><small>${stats.pongWins}W · ${stats.pongLosses}L</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  pong.addEventListener('click', () => {
+    state.arcadeGame = 'pong';
+    if (state.pong.gameOver) resetPongGame();
+    renderPhone();
+  });
+
+  const digDeep = document.createElement('button');
+  digDeep.type = 'button';
+  digDeep.className = 'fc-arcade-game-card';
+  digDeep.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-digdeep"><i class="fa-solid fa-person-digging"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Dig Deep</strong><small>Best score: ${stats.digDeepBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  digDeep.addEventListener('click', () => {
+    state.arcadeGame = 'digdeep';
+    if (!state.digDeep.grid.length || state.digDeep.status !== 'playing') resetDigDeepGame();
+    renderPhone();
+  });
+
+  const checkers = document.createElement('button');
+  checkers.type = 'button';
+  checkers.className = 'fc-arcade-game-card';
+  checkers.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-checkers"><i class="fa-solid fa-circle-half-stroke"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Checkers</strong><small>${stats.checkersWins}W · ${stats.checkersLosses}L vs phone</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  checkers.addEventListener('click', () => {
+    state.arcadeGame = 'checkers';
+    if (!state.checkers.board.length || state.checkers.status !== 'playing') resetCheckersGame();
+    renderPhone();
+  });
+
+  const blackjack = document.createElement('button');
+  blackjack.type = 'button';
+  blackjack.className = 'fc-arcade-game-card';
+  blackjack.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-blackjack"><i class="fa-solid fa-diamond"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Blackjack</strong><small>${stats.blackjackWins}W · ${stats.blackjackLosses}L · ${stats.blackjackPushes}P</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  blackjack.addEventListener('click', () => {
+    state.arcadeGame = 'blackjack';
+    if (!state.blackjack.deck.length || state.blackjack.status !== 'playing') resetBlackjackGame();
+    renderPhone();
+  });
+
+  const solitaire = document.createElement('button');
+  solitaire.type = 'button';
+  solitaire.className = 'fc-arcade-game-card';
+  const solitaireBest = stats.solitaireBestMoves ? `Best: ${stats.solitaireBestMoves} moves` : `${stats.solitaireWins} wins`;
+  solitaire.innerHTML = `
+    <span class="fc-arcade-game-icon fc-arcade-game-icon-solitaire"><i class="fa-solid fa-clone"></i></span>
+    <span class="fc-arcade-game-copy"><strong>Solitaire</strong><small>${solitaireBest}</small></span>
+    <i class="fa-solid fa-chevron-right"></i>
+  `;
+  solitaire.addEventListener('click', () => {
+    state.arcadeGame = 'solitaire';
+    if (!state.solitaire.tableau.length || state.solitaire.status !== 'playing') resetSolitaireGame();
+    renderPhone();
+  });
+
+  grid.append(snake, ttt, mines, runner, faceFlap, guess, stack, blockDrop, chess, farkle, demonRun, breakout, pong, digDeep, checkers, blackjack, solitaire);
   container.appendChild(grid);
 }
 
@@ -6542,6 +6713,9 @@ function pauseArcadeActionGames() {
   pauseStackItGame();
   pauseBlockDropGame();
   pauseDemonRunGame();
+  pauseBreakoutGame();
+  pausePongGame();
+  stopCheckersAi();
   stopChessAi();
   stopFarklePhoneTimer();
 }
@@ -6777,6 +6951,32 @@ function onArcadeKeydown(event) {
       if (state.demonRun.running) pauseDemonRunGame();
       else startDemonRunGame();
     }
+    return;
+  }
+
+  if (state.arcadeGame === 'breakout') {
+    const key = event.key;
+    if (['ArrowLeft','a','A'].includes(key)) { event.preventDefault(); moveBreakoutPaddle(-1); }
+    else if (['ArrowRight','d','D'].includes(key)) { event.preventDefault(); moveBreakoutPaddle(1); }
+    else if (key === ' ') { event.preventDefault(); if (state.breakout.running) pauseBreakoutGame(); else startBreakoutGame(); }
+    return;
+  }
+
+  if (state.arcadeGame === 'pong') {
+    const key = event.key;
+    if (['ArrowUp','w','W'].includes(key)) { event.preventDefault(); movePongPaddle(-1); }
+    else if (['ArrowDown','s','S'].includes(key)) { event.preventDefault(); movePongPaddle(1); }
+    else if (key === ' ') { event.preventDefault(); if (state.pong.running) pausePongGame(); else startPongGame(); }
+    return;
+  }
+
+  if (state.arcadeGame === 'digdeep') {
+    const key = event.key;
+    if (['ArrowUp','w','W'].includes(key)) { event.preventDefault(); moveDigDeep(0,-1); }
+    else if (['ArrowDown','s','S'].includes(key)) { event.preventDefault(); moveDigDeep(0,1); }
+    else if (['ArrowLeft','a','A'].includes(key)) { event.preventDefault(); moveDigDeep(-1,0); }
+    else if (['ArrowRight','d','D'].includes(key)) { event.preventDefault(); moveDigDeep(1,0); }
+    else if (key === ' ') { event.preventDefault(); pumpDigDeep(); }
     return;
   }
 
@@ -9062,6 +9262,615 @@ function updateFarkleBoard() {
 }
 
 // ---------------------------
+// Checkers
+// ---------------------------
+
+function resetCheckersGame() {
+  stopCheckersAi();
+  const board = Array(64).fill(null);
+  for (let row = 0; row < 8; row += 1) {
+    for (let col = 0; col < 8; col += 1) {
+      if ((row + col) % 2 !== 1) continue;
+      if (row < 3) board[row * 8 + col] = 'b';
+      else if (row > 4) board[row * 8 + col] = 'r';
+    }
+  }
+  state.checkers.board = board;
+  state.checkers.turn = 'r';
+  state.checkers.selected = null;
+  state.checkers.legalTargets = [];
+  state.checkers.forcedPiece = null;
+  state.checkers.status = 'playing';
+  state.checkers.message = 'Your move';
+}
+
+function stopCheckersAi() {
+  if (state.checkers.aiTimer) {
+    clearTimeout(state.checkers.aiTimer);
+    state.checkers.aiTimer = null;
+  }
+}
+
+function checkersColor(piece) {
+  if (!piece) return null;
+  return piece.toLowerCase() === 'r' ? 'r' : 'b';
+}
+
+function checkersDirections(piece) {
+  if (!piece) return [];
+  if (piece === 'R' || piece === 'B') return [[-1,-1],[-1,1],[1,-1],[1,1]];
+  return piece === 'r' ? [[-1,-1],[-1,1]] : [[1,-1],[1,1]];
+}
+
+function checkersPieceMoves(board, index, captureOnly = false) {
+  const piece = board[index];
+  if (!piece) return [];
+  const row = Math.floor(index / 8);
+  const col = index % 8;
+  const color = checkersColor(piece);
+  const captures = [];
+  const steps = [];
+  for (const [dr, dc] of checkersDirections(piece)) {
+    const r1 = row + dr;
+    const c1 = col + dc;
+    if (r1 < 0 || r1 > 7 || c1 < 0 || c1 > 7) continue;
+    const i1 = r1 * 8 + c1;
+    if (!board[i1]) {
+      if (!captureOnly) steps.push({ from: index, to: i1, capture: null });
+      continue;
+    }
+    if (checkersColor(board[i1]) === color) continue;
+    const r2 = row + dr * 2;
+    const c2 = col + dc * 2;
+    if (r2 < 0 || r2 > 7 || c2 < 0 || c2 > 7) continue;
+    const i2 = r2 * 8 + c2;
+    if (!board[i2]) captures.push({ from: index, to: i2, capture: i1 });
+  }
+  return captures.length ? captures : (captureOnly ? [] : steps);
+}
+
+function checkersAllMoves(board, color, forcedIndex = null) {
+  const pieces = forcedIndex == null ? board.map((p, i) => ({ p, i })).filter(({p}) => checkersColor(p) === color) : [{ p: board[forcedIndex], i: forcedIndex }];
+  const captures = [];
+  const steps = [];
+  for (const { i } of pieces) {
+    const captureMoves = checkersPieceMoves(board, i, true);
+    captures.push(...captureMoves);
+    if (!captureMoves.length && forcedIndex == null) steps.push(...checkersPieceMoves(board, i, false).filter((m) => m.capture == null));
+  }
+  return captures.length ? captures : (forcedIndex == null ? steps : []);
+}
+
+function checkersPromote(piece, toIndex) {
+  const row = Math.floor(toIndex / 8);
+  if (piece === 'r' && row === 0) return 'R';
+  if (piece === 'b' && row === 7) return 'B';
+  return piece;
+}
+
+function finishCheckersGame(winner) {
+  stopCheckersAi();
+  state.checkers.status = 'over';
+  state.checkers.selected = null;
+  state.checkers.legalTargets = [];
+  state.checkers.forcedPiece = null;
+  const stats = getArcadeStats();
+  if (winner === 'r') {
+    state.checkers.message = 'You win!';
+    void saveArcadeStats({ checkersWins: stats.checkersWins + 1 });
+  } else {
+    state.checkers.message = 'The phone wins.';
+    void saveArcadeStats({ checkersLosses: stats.checkersLosses + 1 });
+  }
+  renderPhone();
+}
+
+function checkCheckersGameOver(nextColor) {
+  const pieces = state.checkers.board.filter((p) => checkersColor(p) === nextColor).length;
+  const moves = checkersAllMoves(state.checkers.board, nextColor);
+  if (!pieces || !moves.length) {
+    finishCheckersGame(nextColor === 'r' ? 'b' : 'r');
+    return true;
+  }
+  return false;
+}
+
+function applyCheckersMove(move, color) {
+  const board = state.checkers.board;
+  const piece = board[move.from];
+  board[move.from] = null;
+  if (move.capture != null) board[move.capture] = null;
+  board[move.to] = checkersPromote(piece, move.to);
+
+  if (move.capture != null) {
+    const more = checkersPieceMoves(board, move.to, true);
+    if (more.length) {
+      state.checkers.forcedPiece = move.to;
+      state.checkers.selected = color === 'r' ? move.to : null;
+      state.checkers.legalTargets = color === 'r' ? more.map((m) => m.to) : [];
+      state.checkers.message = color === 'r' ? 'Keep jumping.' : 'Phone is jumping again...';
+      if (color === 'b') scheduleCheckersAi();
+      renderCheckersBoardOnly();
+      return;
+    }
+  }
+
+  state.checkers.forcedPiece = null;
+  state.checkers.selected = null;
+  state.checkers.legalTargets = [];
+  const next = color === 'r' ? 'b' : 'r';
+  state.checkers.turn = next;
+  if (checkCheckersGameOver(next)) return;
+  if (next === 'b') {
+    state.checkers.message = 'Phone is thinking...';
+    scheduleCheckersAi();
+  } else {
+    state.checkers.message = 'Your move';
+  }
+  renderCheckersBoardOnly();
+}
+
+function scheduleCheckersAi() {
+  stopCheckersAi();
+  if (state.checkers.status !== 'playing' || state.checkers.turn !== 'b') return;
+  state.checkers.aiTimer = setTimeout(() => {
+    state.checkers.aiTimer = null;
+    runCheckersAi();
+  }, 420);
+}
+
+function runCheckersAi() {
+  if (state.checkers.status !== 'playing' || state.checkers.turn !== 'b') return;
+  const moves = checkersAllMoves(state.checkers.board, 'b', state.checkers.forcedPiece);
+  if (!moves.length) {
+    finishCheckersGame('r');
+    return;
+  }
+  const scored = moves.map((move) => {
+    const destinationRow = Math.floor(move.to / 8);
+    const piece = state.checkers.board[move.from];
+    let score = Math.random();
+    if (move.capture != null) score += 8;
+    if (piece === 'b' && destinationRow === 7) score += 4;
+    if (move.to % 8 > 1 && move.to % 8 < 6) score += 0.4;
+    return { move, score };
+  }).sort((a,b) => b.score - a.score);
+  applyCheckersMove(scored[0].move, 'b');
+}
+
+function onCheckersSquare(index) {
+  if (state.checkers.status !== 'playing' || state.checkers.turn !== 'r') return;
+  const board = state.checkers.board;
+  const forced = state.checkers.forcedPiece;
+  const allMoves = checkersAllMoves(board, 'r', forced);
+  const selected = state.checkers.selected;
+  if (selected != null) {
+    const chosen = allMoves.find((m) => m.from === selected && m.to === index);
+    if (chosen) {
+      applyCheckersMove(chosen, 'r');
+      return;
+    }
+  }
+  if (checkersColor(board[index]) === 'r') {
+    const pieceMoves = allMoves.filter((m) => m.from === index);
+    if (pieceMoves.length) {
+      state.checkers.selected = index;
+      state.checkers.legalTargets = pieceMoves.map((m) => m.to);
+      state.checkers.message = pieceMoves[0].capture != null ? 'Capture required.' : 'Choose a destination.';
+      renderCheckersBoardOnly();
+    }
+  }
+}
+
+function renderCheckersGame(container) {
+  if (!state.checkers.board.length) resetCheckersGame();
+  const stats = getArcadeStats();
+  container.innerHTML = `
+    <div class="fc-checkers-shell">
+      <div class="fc-arcade-scorebar"><span>You <strong>${stats.checkersWins}W</strong></span><span>Phone <strong>${stats.checkersLosses}W</strong></span></div>
+      <div class="fc-checkers-board" role="grid" aria-label="Checkers board"></div>
+      <div class="fc-checkers-status"></div>
+      <button type="button" class="fc-arcade-secondary fc-checkers-new"><i class="fa-solid fa-rotate-right"></i> New Game</button>
+    </div>`;
+  container.querySelector('.fc-checkers-new')?.addEventListener('click', () => { resetCheckersGame(); renderCheckersGame(container); });
+  renderCheckersBoardOnly();
+  if (state.checkers.status === 'playing' && state.checkers.turn === 'b' && !state.checkers.aiTimer) scheduleCheckersAi();
+}
+
+function renderCheckersBoardOnly() {
+  const boardEl = state.root?.querySelector('.fc-checkers-board');
+  const status = state.root?.querySelector('.fc-checkers-status');
+  if (!boardEl) return;
+  boardEl.replaceChildren();
+  for (let i = 0; i < 64; i += 1) {
+    const row = Math.floor(i / 8);
+    const col = i % 8;
+    const sq = document.createElement('button');
+    sq.type = 'button';
+    sq.className = `fc-checkers-square ${(row + col) % 2 ? 'is-dark' : 'is-light'}`;
+    if (state.checkers.selected === i) sq.classList.add('is-selected');
+    if (state.checkers.legalTargets.includes(i)) sq.classList.add('is-target');
+    const piece = state.checkers.board[i];
+    if (piece) {
+      const chip = document.createElement('span');
+      chip.className = `fc-checkers-piece ${checkersColor(piece) === 'r' ? 'is-player' : 'is-phone'} ${piece === piece.toUpperCase() ? 'is-king' : ''}`;
+      chip.innerHTML = piece === piece.toUpperCase() ? '<i class="fa-solid fa-crown"></i>' : '';
+      sq.appendChild(chip);
+    }
+    sq.addEventListener('click', () => onCheckersSquare(i));
+    boardEl.appendChild(sq);
+  }
+  if (status) status.textContent = state.checkers.message;
+}
+
+// ---------------------------
+// Shared card helpers
+// ---------------------------
+
+const PHONE_CARD_SUITS = ['H','D','C','S'];
+const PHONE_CARD_SUIT_SYMBOL = { H: '♥', D: '♦', C: '♣', S: '♠' };
+
+function makePhoneCardDeck() {
+  const deck = [];
+  for (const suit of PHONE_CARD_SUITS) {
+    for (let rank = 1; rank <= 13; rank += 1) deck.push({ suit, rank, faceUp: false });
+  }
+  return deck;
+}
+
+function shufflePhoneCards(cards) {
+  const deck = cards.map((card) => ({ ...card }));
+  for (let i = deck.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+function phoneCardRank(rank) {
+  return ({ 1:'A', 11:'J', 12:'Q', 13:'K' })[rank] || String(rank);
+}
+
+function phoneCardIsRed(card) {
+  return card?.suit === 'H' || card?.suit === 'D';
+}
+
+function phoneCardLabel(card) {
+  if (!card) return '';
+  return `${phoneCardRank(card.rank)}${PHONE_CARD_SUIT_SYMBOL[card.suit]}`;
+}
+
+// ---------------------------
+// Blackjack
+// ---------------------------
+
+function blackjackValue(cards) {
+  let total = 0;
+  let aces = 0;
+  for (const card of cards) {
+    if (card.rank === 1) { total += 11; aces += 1; }
+    else total += Math.min(10, card.rank);
+  }
+  while (total > 21 && aces > 0) { total -= 10; aces -= 1; }
+  return total;
+}
+
+function resetBlackjackGame() {
+  state.blackjack.deck = shufflePhoneCards(makePhoneCardDeck());
+  state.blackjack.player = [];
+  state.blackjack.dealer = [];
+  state.blackjack.status = 'playing';
+  state.blackjack.message = 'Hit or stand.';
+  state.blackjack.player.push(state.blackjack.deck.pop());
+  state.blackjack.dealer.push(state.blackjack.deck.pop());
+  state.blackjack.player.push(state.blackjack.deck.pop());
+  state.blackjack.dealer.push(state.blackjack.deck.pop());
+  const player = blackjackValue(state.blackjack.player);
+  const dealer = blackjackValue(state.blackjack.dealer);
+  if (player === 21 || dealer === 21) {
+    if (player === 21 && dealer === 21) finishBlackjackHand('push', 'Both have blackjack — push.');
+    else if (player === 21) finishBlackjackHand('win', 'Blackjack! You win.');
+    else finishBlackjackHand('loss', 'Dealer has blackjack.');
+  }
+}
+
+function finishBlackjackHand(result, message) {
+  if (state.blackjack.status !== 'playing') return;
+  state.blackjack.status = 'over';
+  state.blackjack.message = message;
+  const stats = getArcadeStats();
+  if (result === 'win') void saveArcadeStats({ blackjackWins: stats.blackjackWins + 1 });
+  else if (result === 'loss') void saveArcadeStats({ blackjackLosses: stats.blackjackLosses + 1 });
+  else void saveArcadeStats({ blackjackPushes: stats.blackjackPushes + 1 });
+}
+
+function blackjackHit() {
+  if (state.blackjack.status !== 'playing') return;
+  state.blackjack.player.push(state.blackjack.deck.pop());
+  const value = blackjackValue(state.blackjack.player);
+  if (value > 21) finishBlackjackHand('loss', `Bust with ${value}. Dealer wins.`);
+  else if (value === 21) blackjackStand();
+  else state.blackjack.message = `${value}. Hit or stand?`;
+  renderPhone();
+}
+
+function blackjackStand() {
+  if (state.blackjack.status !== 'playing') return;
+  while (blackjackValue(state.blackjack.dealer) < 17 && state.blackjack.deck.length) state.blackjack.dealer.push(state.blackjack.deck.pop());
+  const player = blackjackValue(state.blackjack.player);
+  const dealer = blackjackValue(state.blackjack.dealer);
+  if (dealer > 21) finishBlackjackHand('win', `Dealer busts with ${dealer}. You win!`);
+  else if (player > dealer) finishBlackjackHand('win', `${player} beats ${dealer}. You win!`);
+  else if (player < dealer) finishBlackjackHand('loss', `${dealer} beats ${player}. Dealer wins.`);
+  else finishBlackjackHand('push', `${player} to ${dealer}. Push.`);
+  renderPhone();
+}
+
+function blackjackCardHtml(card, hidden = false) {
+  if (hidden) return '<span class="fc-playing-card is-hidden"><span>◆</span></span>';
+  const red = phoneCardIsRed(card) ? ' is-red' : '';
+  return `<span class="fc-playing-card${red}"><strong>${phoneCardRank(card.rank)}</strong><span>${PHONE_CARD_SUIT_SYMBOL[card.suit]}</span></span>`;
+}
+
+function renderBlackjackGame(container) {
+  if (!state.blackjack.deck.length && !state.blackjack.player.length) resetBlackjackGame();
+  const stats = getArcadeStats();
+  const over = state.blackjack.status !== 'playing';
+  const dealerShown = over ? blackjackValue(state.blackjack.dealer) : blackjackValue(state.blackjack.dealer.slice(0,1));
+  container.innerHTML = `
+    <div class="fc-blackjack-shell">
+      <div class="fc-arcade-scorebar"><span>${stats.blackjackWins}W</span><span>${stats.blackjackLosses}L</span><span>${stats.blackjackPushes}P</span></div>
+      <div class="fc-blackjack-table">
+        <div class="fc-blackjack-hand"><div class="fc-blackjack-label"><span>Dealer</span><strong>${over ? dealerShown : `${dealerShown}+?`}</strong></div><div class="fc-blackjack-cards">${state.blackjack.dealer.map((c,i) => blackjackCardHtml(c, !over && i === 1)).join('')}</div></div>
+        <div class="fc-blackjack-divider"></div>
+        <div class="fc-blackjack-hand"><div class="fc-blackjack-label"><span>You</span><strong>${blackjackValue(state.blackjack.player)}</strong></div><div class="fc-blackjack-cards">${state.blackjack.player.map((c) => blackjackCardHtml(c)).join('')}</div></div>
+      </div>
+      <div class="fc-blackjack-message">${state.blackjack.message}</div>
+      <div class="fc-blackjack-actions">
+        <button type="button" class="fc-arcade-primary fc-blackjack-hit" ${over ? 'disabled' : ''}><i class="fa-solid fa-plus"></i> Hit</button>
+        <button type="button" class="fc-arcade-secondary fc-blackjack-stand" ${over ? 'disabled' : ''}><i class="fa-solid fa-hand"></i> Stand</button>
+        <button type="button" class="fc-arcade-secondary fc-blackjack-new"><i class="fa-solid fa-shuffle"></i> New Hand</button>
+      </div>
+    </div>`;
+  container.querySelector('.fc-blackjack-hit')?.addEventListener('click', blackjackHit);
+  container.querySelector('.fc-blackjack-stand')?.addEventListener('click', blackjackStand);
+  container.querySelector('.fc-blackjack-new')?.addEventListener('click', () => { resetBlackjackGame(); renderPhone(); });
+}
+
+// ---------------------------
+// Solitaire (one-card Klondike)
+// ---------------------------
+
+function resetSolitaireGame() {
+  const deck = shufflePhoneCards(makePhoneCardDeck());
+  const tableau = Array.from({ length: 7 }, () => []);
+  for (let col = 0; col < 7; col += 1) {
+    for (let n = 0; n <= col; n += 1) {
+      const card = deck.pop();
+      card.faceUp = n === col;
+      tableau[col].push(card);
+    }
+  }
+  deck.forEach((card) => { card.faceUp = false; });
+  state.solitaire.stock = deck;
+  state.solitaire.waste = [];
+  state.solitaire.tableau = tableau;
+  state.solitaire.foundations = { H: [], D: [], C: [], S: [] };
+  state.solitaire.selection = null;
+  state.solitaire.status = 'playing';
+  state.solitaire.moves = 0;
+  state.solitaire.message = 'Build each suit from Ace to King.';
+}
+
+function solitaireSelectedCards() {
+  const sel = state.solitaire.selection;
+  if (!sel) return [];
+  if (sel.source === 'waste') return state.solitaire.waste.length ? [state.solitaire.waste.at(-1)] : [];
+  if (sel.source === 'foundation') {
+    const pile = state.solitaire.foundations[sel.suit] || [];
+    return pile.length ? [pile.at(-1)] : [];
+  }
+  if (sel.source === 'tableau') return (state.solitaire.tableau[sel.col] || []).slice(sel.index);
+  return [];
+}
+
+function solitaireRunValid(cards) {
+  if (!cards.length || cards.some((c) => !c.faceUp)) return false;
+  for (let i = 0; i < cards.length - 1; i += 1) {
+    if (cards[i].rank !== cards[i+1].rank + 1) return false;
+    if (phoneCardIsRed(cards[i]) === phoneCardIsRed(cards[i+1])) return false;
+  }
+  return true;
+}
+
+function removeSolitaireSelection() {
+  const sel = state.solitaire.selection;
+  if (!sel) return [];
+  let cards = [];
+  if (sel.source === 'waste') cards = state.solitaire.waste.splice(-1, 1);
+  else if (sel.source === 'foundation') cards = state.solitaire.foundations[sel.suit].splice(-1, 1);
+  else if (sel.source === 'tableau') cards = state.solitaire.tableau[sel.col].splice(sel.index);
+  state.solitaire.selection = null;
+  return cards;
+}
+
+function canSolitairePlaceOnTableau(card, destination) {
+  if (!card) return false;
+  if (!destination.length) return card.rank === 13;
+  const top = destination.at(-1);
+  return top.faceUp && top.rank === card.rank + 1 && phoneCardIsRed(top) !== phoneCardIsRed(card);
+}
+
+function moveSolitaireToTableau(col) {
+  const sel = state.solitaire.selection;
+  if (!sel || (sel.source === 'tableau' && sel.col === col)) return false;
+  const cards = solitaireSelectedCards();
+  if (!solitaireRunValid(cards)) return false;
+  const dest = state.solitaire.tableau[col];
+  if (!canSolitairePlaceOnTableau(cards[0], dest)) return false;
+  const moving = removeSolitaireSelection();
+  moving.forEach((c) => { c.faceUp = true; });
+  dest.push(...moving);
+  state.solitaire.moves += 1;
+  state.solitaire.message = 'Card moved.';
+  checkSolitaireWin();
+  return true;
+}
+
+function moveSolitaireToFoundation(suit) {
+  const sel = state.solitaire.selection;
+  if (!sel) return false;
+  const cards = solitaireSelectedCards();
+  if (cards.length !== 1) return false;
+  const card = cards[0];
+  if (card.suit !== suit) return false;
+  const pile = state.solitaire.foundations[suit];
+  const neededRank = pile.length ? pile.at(-1).rank + 1 : 1;
+  if (card.rank !== neededRank) return false;
+  const moving = removeSolitaireSelection();
+  moving[0].faceUp = true;
+  pile.push(moving[0]);
+  state.solitaire.moves += 1;
+  state.solitaire.message = `${phoneCardLabel(card)} moved to foundation.`;
+  checkSolitaireWin();
+  return true;
+}
+
+function solitaireDrawStock() {
+  if (state.solitaire.status !== 'playing') return;
+  state.solitaire.selection = null;
+  let changed = false;
+  if (state.solitaire.stock.length) {
+    const card = state.solitaire.stock.pop();
+    card.faceUp = true;
+    state.solitaire.waste.push(card);
+    state.solitaire.message = 'Drew a card.';
+    changed = true;
+  } else if (state.solitaire.waste.length) {
+    const recycled = state.solitaire.waste.splice(0).reverse();
+    recycled.forEach((card) => { card.faceUp = false; });
+    state.solitaire.stock.push(...recycled);
+    state.solitaire.message = 'Recycled the waste pile.';
+    changed = true;
+  }
+  if (changed) state.solitaire.moves += 1;
+  renderPhone();
+}
+
+function solitaireClickWaste() {
+  if (!state.solitaire.waste.length || state.solitaire.status !== 'playing') return;
+  state.solitaire.selection = { source: 'waste' };
+  state.solitaire.message = `Selected ${phoneCardLabel(state.solitaire.waste.at(-1))}.`;
+  renderPhone();
+}
+
+function solitaireClickFoundation(suit) {
+  if (state.solitaire.status !== 'playing') return;
+  if (state.solitaire.selection) {
+    if (moveSolitaireToFoundation(suit)) { renderPhone(); return; }
+  }
+  const pile = state.solitaire.foundations[suit];
+  if (pile.length) {
+    state.solitaire.selection = { source: 'foundation', suit };
+    state.solitaire.message = `Selected ${phoneCardLabel(pile.at(-1))}.`;
+    renderPhone();
+  }
+}
+
+function solitaireClickTableau(col, index = null) {
+  if (state.solitaire.status !== 'playing') return;
+  const pile = state.solitaire.tableau[col];
+  if (state.solitaire.selection && moveSolitaireToTableau(col)) { renderPhone(); return; }
+  if (!pile.length) return;
+  const cardIndex = index == null ? pile.length - 1 : index;
+  const card = pile[cardIndex];
+  if (!card.faceUp) {
+    if (cardIndex === pile.length - 1) {
+      card.faceUp = true;
+      state.solitaire.moves += 1;
+      state.solitaire.selection = null;
+      state.solitaire.message = `Flipped ${phoneCardLabel(card)}.`;
+      renderPhone();
+    }
+    return;
+  }
+  const run = pile.slice(cardIndex);
+  if (!solitaireRunValid(run)) return;
+  state.solitaire.selection = { source: 'tableau', col, index: cardIndex };
+  state.solitaire.message = `Selected ${phoneCardLabel(card)}${run.length > 1 ? ` +${run.length - 1}` : ''}.`;
+  renderPhone();
+}
+
+function solitaireAutoFoundation(source, col = null, index = null) {
+  if (state.solitaire.status !== 'playing') return;
+  if (source === 'waste') {
+    if (!state.solitaire.waste.length) return;
+    state.solitaire.selection = { source: 'waste' };
+  } else {
+    const pile = state.solitaire.tableau[col];
+    if (!pile?.length || index !== pile.length - 1 || !pile[index].faceUp) return;
+    state.solitaire.selection = { source: 'tableau', col, index };
+  }
+  const card = solitaireSelectedCards()[0];
+  if (card && moveSolitaireToFoundation(card.suit)) renderPhone();
+}
+
+function checkSolitaireWin() {
+  const total = Object.values(state.solitaire.foundations).reduce((sum, pile) => sum + pile.length, 0);
+  if (total !== 52 || state.solitaire.status === 'won') return false;
+  state.solitaire.status = 'won';
+  state.solitaire.selection = null;
+  state.solitaire.message = `You won in ${state.solitaire.moves} moves!`;
+  const stats = getArcadeStats();
+  const patch = { solitaireWins: stats.solitaireWins + 1 };
+  if (!stats.solitaireBestMoves || state.solitaire.moves < stats.solitaireBestMoves) patch.solitaireBestMoves = state.solitaire.moves;
+  void saveArcadeStats(patch);
+  return true;
+}
+
+function solitaireCardButton(card, selected = false, extraClass = '') {
+  const hidden = !card.faceUp;
+  const red = !hidden && phoneCardIsRed(card);
+  return `<span class="fc-sol-card${hidden ? ' is-hidden' : ''}${red ? ' is-red' : ''}${selected ? ' is-selected' : ''}${extraClass ? ` ${extraClass}` : ''}">${hidden ? '<span>◆</span>' : `<strong>${phoneCardRank(card.rank)}</strong><span>${PHONE_CARD_SUIT_SYMBOL[card.suit]}</span>`}</span>`;
+}
+
+function renderSolitaireGame(container) {
+  if (!state.solitaire.tableau.length) resetSolitaireGame();
+  const stats = getArcadeStats();
+  const sel = state.solitaire.selection;
+  const waste = state.solitaire.waste.at(-1);
+  container.innerHTML = `
+    <div class="fc-solitaire-shell">
+      <div class="fc-arcade-scorebar"><span>Moves <strong>${state.solitaire.moves}</strong></span><span>Wins <strong>${stats.solitaireWins}</strong></span><span>Best <strong>${stats.solitaireBestMoves || '—'}</strong></span></div>
+      <div class="fc-sol-toprow">
+        <button type="button" class="fc-sol-slot fc-sol-stock" aria-label="Stock">${state.solitaire.stock.length ? `<span class="fc-sol-card is-hidden"><span>◆</span></span><small>${state.solitaire.stock.length}</small>` : '<span class="fc-sol-empty-card"><i class="fa-solid fa-rotate"></i></span>'}</button>
+        <button type="button" class="fc-sol-slot fc-sol-waste" aria-label="Waste">${waste ? solitaireCardButton(waste, sel?.source === 'waste') : '<span class="fc-sol-empty-card"></span>'}</button>
+        <span class="fc-sol-spacer"></span>
+        ${PHONE_CARD_SUITS.map((suit) => { const pile = state.solitaire.foundations[suit]; const card = pile.at(-1); return `<button type="button" class="fc-sol-slot fc-sol-foundation" data-suit="${suit}" aria-label="${suit} foundation">${card ? solitaireCardButton(card, sel?.source === 'foundation' && sel?.suit === suit) : `<span class="fc-sol-empty-card ${suit === 'H' || suit === 'D' ? 'is-red' : ''}">${PHONE_CARD_SUIT_SYMBOL[suit]}</span>`}</button>`; }).join('')}
+      </div>
+      <div class="fc-sol-tableau">
+        ${state.solitaire.tableau.map((pile, col) => `<div class="fc-sol-column" data-col="${col}" style="height:${Math.max(92, 46 + Math.max(0,pile.length-1)*15)}px">${pile.length ? pile.map((card,index) => `<button type="button" class="fc-sol-card-button" data-col="${col}" data-index="${index}" style="top:${index*15}px;z-index:${index+1}" aria-label="${card.faceUp ? phoneCardLabel(card) : 'Face-down card'}">${solitaireCardButton(card, sel?.source === 'tableau' && sel?.col === col && sel?.index === index)}</button>`).join('') : `<button type="button" class="fc-sol-empty-column" data-col="${col}" aria-label="Empty tableau"><span>K</span></button>`}</div>`).join('')}
+      </div>
+      <div class="fc-solitaire-message">${state.solitaire.message}</div>
+      <button type="button" class="fc-arcade-secondary fc-sol-new"><i class="fa-solid fa-shuffle"></i> New Deal</button>
+    </div>`;
+
+  container.querySelector('.fc-sol-stock')?.addEventListener('click', solitaireDrawStock);
+  container.querySelector('.fc-sol-waste')?.addEventListener('click', solitaireClickWaste);
+  container.querySelector('.fc-sol-waste')?.addEventListener('dblclick', () => solitaireAutoFoundation('waste'));
+  container.querySelectorAll('.fc-sol-foundation').forEach((button) => button.addEventListener('click', () => solitaireClickFoundation(button.dataset.suit)));
+  container.querySelectorAll('.fc-sol-card-button').forEach((button) => {
+    const col = Number(button.dataset.col);
+    const index = Number(button.dataset.index);
+    button.addEventListener('click', (event) => { event.stopPropagation(); solitaireClickTableau(col, index); });
+    button.addEventListener('dblclick', (event) => { event.stopPropagation(); solitaireAutoFoundation('tableau', col, index); });
+  });
+  container.querySelectorAll('.fc-sol-column').forEach((column) => column.addEventListener('click', () => solitaireClickTableau(Number(column.dataset.col), null)));
+  container.querySelectorAll('.fc-sol-empty-column').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); solitaireClickTableau(Number(button.dataset.col), null); }));
+  container.querySelector('.fc-sol-new')?.addEventListener('click', () => { resetSolitaireGame(); renderPhone(); });
+}
+
+// ---------------------------
 // Music app
 // ---------------------------
 
@@ -10179,6 +10988,123 @@ async function setPhoneTextScalePercent(value) {
 async function setPhoneTextFollowsSize(value) {
   await game.settings.set(MODULE_ID, PHONE_TEXT_FOLLOW_SIZE_SETTING, Boolean(value));
 }
+
+
+// ---------------------------
+// Breakout
+// ---------------------------
+const BREAKOUT_WIDTH = 220;
+const BREAKOUT_HEIGHT = 300;
+const BREAKOUT_TICK_MS = 18;
+
+function resetBreakoutGame() {
+  stopBreakoutInterval();
+  const bricks = [];
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 6; col++) bricks.push({ row, col, alive: true });
+  }
+  Object.assign(state.breakout, { running: false, paused: false, gameOver: false, paddleX: 82, ballX: 110, ballY: 222, vx: 2.4, vy: -2.8, bricks, score: 0, lives: 3 });
+}
+function stopBreakoutInterval() { if (state.breakout.interval) { clearInterval(state.breakout.interval); state.breakout.interval = null; } }
+function startBreakoutGame() { if (state.breakout.gameOver) resetBreakoutGame(); state.breakout.running = true; state.breakout.paused = false; stopBreakoutInterval(); state.breakout.interval = setInterval(stepBreakoutGame, BREAKOUT_TICK_MS); updateBreakoutBoard(); }
+function pauseBreakoutGame() { if (!state.breakout.running) return; state.breakout.running = false; state.breakout.paused = true; stopBreakoutInterval(); updateBreakoutBoard(); }
+function moveBreakoutPaddle(dir) { state.breakout.paddleX = Math.max(0, Math.min(BREAKOUT_WIDTH - 56, state.breakout.paddleX + dir * 18)); if (!state.breakout.running && !state.breakout.gameOver) startBreakoutGame(); updateBreakoutBoard(); }
+function finishBreakoutGame() { state.breakout.running = false; state.breakout.paused = false; state.breakout.gameOver = true; stopBreakoutInterval(); const stats=getArcadeStats(); if (state.breakout.score > stats.breakoutBest) void saveArcadeStats({ breakoutBest: state.breakout.score }); updateBreakoutBoard(); }
+function stepBreakoutGame() {
+  const g=state.breakout; g.ballX += g.vx; g.ballY += g.vy;
+  if (g.ballX <= 6 || g.ballX >= BREAKOUT_WIDTH-6) { g.vx *= -1; g.ballX=Math.max(6,Math.min(BREAKOUT_WIDTH-6,g.ballX)); }
+  if (g.ballY <= 6) { g.vy=Math.abs(g.vy); g.ballY=6; }
+  const paddleY=272, paddleW=56;
+  if (g.vy>0 && g.ballY>=paddleY-6 && g.ballY<=paddleY+8 && g.ballX>=g.paddleX && g.ballX<=g.paddleX+paddleW) {
+    const offset=(g.ballX-(g.paddleX+paddleW/2))/(paddleW/2); g.vx=offset*3.6; g.vy=-Math.max(2.6,Math.abs(g.vy)); g.ballY=paddleY-7;
+  }
+  const bw=31, bh=13, gap=4, startX=6, startY=34;
+  for (const b of g.bricks) {
+    if (!b.alive) continue;
+    const x=startX+b.col*(bw+gap), y=startY+b.row*(bh+gap);
+    if (g.ballX+5>x && g.ballX-5<x+bw && g.ballY+5>y && g.ballY-5<y+bh) { b.alive=false; g.score += 10; g.vy *= -1; break; }
+  }
+  if (!g.bricks.some(b=>b.alive)) { g.score += 100; finishBreakoutGame(); return; }
+  if (g.ballY > BREAKOUT_HEIGHT+8) {
+    g.lives -= 1;
+    if (g.lives <= 0) { finishBreakoutGame(); return; }
+    g.ballX=110; g.ballY=222; g.vx=2.4*(Math.random()<.5?-1:1); g.vy=-2.8; g.running=false; g.paused=true; stopBreakoutInterval();
+  }
+  updateBreakoutBoard();
+}
+function renderBreakoutGame(container) {
+  if (!state.breakout.bricks.length) resetBreakoutGame(); const stats=getArcadeStats();
+  container.innerHTML=`<div class="fc-canvas-game-shell"><div class="fc-arcade-scorebar"><span>Score <strong class="fc-breakout-score">${state.breakout.score}</strong></span><span>Lives <strong class="fc-breakout-lives">${state.breakout.lives}</strong></span><span>Best <strong>${Math.max(stats.breakoutBest,state.breakout.score)}</strong></span></div><canvas class="fc-game-canvas fc-breakout-canvas" width="220" height="300" aria-label="Breakout game"></canvas><div class="fc-game-status fc-breakout-status"></div><div class="fc-game-controls three"><button type="button" class="fc-arcade-secondary fc-breakout-left"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="fc-arcade-primary fc-breakout-start">Start</button><button type="button" class="fc-arcade-secondary fc-breakout-right"><i class="fa-solid fa-arrow-right"></i></button></div><button type="button" class="fc-arcade-secondary fc-breakout-new"><i class="fa-solid fa-rotate-right"></i> New Game</button></div>`;
+  container.querySelector('.fc-breakout-left')?.addEventListener('click',()=>moveBreakoutPaddle(-1));
+  container.querySelector('.fc-breakout-right')?.addEventListener('click',()=>moveBreakoutPaddle(1));
+  container.querySelector('.fc-breakout-start')?.addEventListener('click',()=>state.breakout.running?pauseBreakoutGame():startBreakoutGame());
+  container.querySelector('.fc-breakout-new')?.addEventListener('click',()=>{resetBreakoutGame();updateBreakoutBoard();});
+  updateBreakoutBoard();
+}
+function updateBreakoutBoard() {
+  const c=state.root?.querySelector('.fc-breakout-canvas'); if (!c) return; const ctx=c.getContext('2d'); const g=state.breakout;
+  ctx.clearRect(0,0,220,300); ctx.fillStyle='#10182a'; ctx.fillRect(0,0,220,300);
+  const palette=['#ef6461','#f6ae2d','#f4d35e','#70c1b3','#4ea5d9']; const bw=31,bh=13,gap=4,startX=6,startY=34;
+  for (const b of g.bricks) if (b.alive) { ctx.fillStyle=palette[b.row%palette.length]; ctx.fillRect(startX+b.col*(bw+gap),startY+b.row*(bh+gap),bw,bh); }
+  ctx.fillStyle='#e8eef7'; ctx.fillRect(g.paddleX,272,56,8); ctx.beginPath(); ctx.arc(g.ballX,g.ballY,5,0,Math.PI*2); ctx.fill();
+  const s=state.root.querySelector('.fc-breakout-score'); if(s)s.textContent=String(g.score); const l=state.root.querySelector('.fc-breakout-lives'); if(l)l.textContent=String(g.lives);
+  const status=state.root.querySelector('.fc-breakout-status'); if(status) status.textContent=g.gameOver?(g.bricks.some(b=>b.alive)?'Game over':'Board cleared!'):g.paused?'Paused — press Start to continue':g.running?'':'Move the paddle to start';
+  const start=state.root.querySelector('.fc-breakout-start'); if(start)start.textContent=g.running?'Pause':'Start';
+}
+
+// ---------------------------
+// Pong
+// ---------------------------
+const PONG_TICK_MS=18;
+function resetPongGame(){ stopPongInterval(); Object.assign(state.pong,{running:false,paused:false,gameOver:false,playerY:115,aiY:115,ballX:110,ballY:150,vx:2.6,vy:1.8,playerScore:0,aiScore:0}); }
+function stopPongInterval(){ if(state.pong.interval){clearInterval(state.pong.interval);state.pong.interval=null;} }
+function startPongGame(){ if(state.pong.gameOver)resetPongGame();state.pong.running=true;state.pong.paused=false;stopPongInterval();state.pong.interval=setInterval(stepPongGame,PONG_TICK_MS);updatePongBoard(); }
+function pausePongGame(){ if(!state.pong.running)return;state.pong.running=false;state.pong.paused=true;stopPongInterval();updatePongBoard(); }
+function movePongPaddle(dir){ state.pong.playerY=Math.max(8,Math.min(252,state.pong.playerY+dir*22)); if(!state.pong.running&&!state.pong.gameOver)startPongGame(); updatePongBoard(); }
+function resetPongBall(direction=1){ state.pong.ballX=110;state.pong.ballY=150;state.pong.vx=2.6*direction;state.pong.vy=(Math.random()*2.6-1.3)||1.2; }
+function finishPongGame(playerWon){ state.pong.running=false;state.pong.gameOver=true;state.pong.paused=false;stopPongInterval();const stats=getArcadeStats();void saveArcadeStats(playerWon?{pongWins:stats.pongWins+1}:{pongLosses:stats.pongLosses+1});updatePongBoard(); }
+function stepPongGame(){ const g=state.pong; g.ballX+=g.vx;g.ballY+=g.vy; if(g.ballY<6||g.ballY>294){g.vy*=-1;g.ballY=Math.max(6,Math.min(294,g.ballY));}
+  const aiCenter=g.aiY+20; if(aiCenter<g.ballY-4)g.aiY+=2.0; else if(aiCenter>g.ballY+4)g.aiY-=2.0; g.aiY=Math.max(8,Math.min(252,g.aiY));
+  if(g.vx<0&&g.ballX<=18&&g.ballX>=9&&g.ballY>=g.playerY&&g.ballY<=g.playerY+40){g.vx=Math.abs(g.vx)+.06;g.vy+=(g.ballY-(g.playerY+20))*.045;g.ballX=19;}
+  if(g.vx>0&&g.ballX>=202&&g.ballX<=211&&g.ballY>=g.aiY&&g.ballY<=g.aiY+40){g.vx=-(Math.abs(g.vx)+.04);g.vy+=(g.ballY-(g.aiY+20))*.04;g.ballX=201;}
+  if(g.ballX<0){g.aiScore++; if(g.aiScore>=5){finishPongGame(false);return;} resetPongBall(1);} else if(g.ballX>220){g.playerScore++; if(g.playerScore>=5){finishPongGame(true);return;} resetPongBall(-1);} updatePongBoard(); }
+function renderPongGame(container){ const stats=getArcadeStats(); container.innerHTML=`<div class="fc-canvas-game-shell"><div class="fc-arcade-scorebar"><span>You <strong class="fc-pong-you">${state.pong.playerScore}</strong></span><span>Phone <strong class="fc-pong-ai">${state.pong.aiScore}</strong></span><span>Record <strong>${stats.pongWins}-${stats.pongLosses}</strong></span></div><canvas class="fc-game-canvas fc-pong-canvas" width="220" height="300" aria-label="Pong game"></canvas><div class="fc-game-status fc-pong-status"></div><div class="fc-game-controls three"><button type="button" class="fc-arcade-secondary fc-pong-up"><i class="fa-solid fa-arrow-up"></i></button><button type="button" class="fc-arcade-primary fc-pong-start">Start</button><button type="button" class="fc-arcade-secondary fc-pong-down"><i class="fa-solid fa-arrow-down"></i></button></div><button type="button" class="fc-arcade-secondary fc-pong-new"><i class="fa-solid fa-rotate-right"></i> New Match</button></div>`;container.querySelector('.fc-pong-up')?.addEventListener('click',()=>movePongPaddle(-1));container.querySelector('.fc-pong-down')?.addEventListener('click',()=>movePongPaddle(1));container.querySelector('.fc-pong-start')?.addEventListener('click',()=>state.pong.running?pausePongGame():startPongGame());container.querySelector('.fc-pong-new')?.addEventListener('click',()=>{resetPongGame();updatePongBoard();});updatePongBoard(); }
+function updatePongBoard(){ const c=state.root?.querySelector('.fc-pong-canvas');if(!c)return;const ctx=c.getContext('2d'),g=state.pong;ctx.fillStyle='#080c12';ctx.fillRect(0,0,220,300);ctx.strokeStyle='rgba(255,255,255,.22)';ctx.setLineDash([6,6]);ctx.beginPath();ctx.moveTo(110,0);ctx.lineTo(110,300);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#fff';ctx.fillRect(10,g.playerY,8,40);ctx.fillRect(202,g.aiY,8,40);ctx.beginPath();ctx.arc(g.ballX,g.ballY,5,0,Math.PI*2);ctx.fill();const you=state.root.querySelector('.fc-pong-you');if(you)you.textContent=String(g.playerScore);const ai=state.root.querySelector('.fc-pong-ai');if(ai)ai.textContent=String(g.aiScore);const status=state.root.querySelector('.fc-pong-status');if(status)status.textContent=g.gameOver?(g.playerScore>g.aiScore?'You win!':'Phone wins.'):(g.paused?'Paused':g.running?'First to 5':'Use Up/Down to start');const start=state.root.querySelector('.fc-pong-start');if(start)start.textContent=g.running?'Pause':'Start'; }
+
+// ---------------------------
+// Dig Deep (dig-and-pump arcade game)
+// ---------------------------
+const DIG_COLS=12,DIG_ROWS=14;
+function resetDigDeepGame(){ const grid=Array.from({length:DIG_ROWS},()=>Array(DIG_COLS).fill(true)); const carve=(x,y)=>{if(y>=0&&y<DIG_ROWS&&x>=0&&x<DIG_COLS)grid[y][x]=false;}; for(let x=0;x<4;x++)carve(x,1); for(let y=1;y<5;y++)carve(1,y); const enemies=[{x:10,y:2,hp:2},{x:9,y:8,hp:2},{x:3,y:12,hp:2}]; for(const e of enemies)carve(e.x,e.y); state.digDeep={grid,player:{x:1,y:1},enemies,score:0,status:'playing',steps:0,message:'Dig tunnels and pump nearby creatures.'}; }
+function digDeepInside(x,y){return x>=0&&x<DIG_COLS&&y>=0&&y<DIG_ROWS;}
+function moveDigDeep(dx,dy){ const g=state.digDeep;if(g.status!=='playing')return;const nx=g.player.x+dx,ny=g.player.y+dy;if(!digDeepInside(nx,ny))return;g.player={x:nx,y:ny};if(g.grid[ny][nx]){g.grid[ny][nx]=false;g.score+=2;}g.steps++;if(g.enemies.some(e=>e.x===nx&&e.y===ny)){finishDigDeep(false);return;}if(g.steps%2===0)stepDigDeepEnemies();updateDigDeepBoard(); }
+function digDeepClearLine(x1,y1,x2,y2){ if(x1===x2){const a=Math.min(y1,y2),b=Math.max(y1,y2);for(let y=a+1;y<b;y++)if(state.digDeep.grid[y][x1])return false;return true;} if(y1===y2){const a=Math.min(x1,x2),b=Math.max(x1,x2);for(let x=a+1;x<b;x++)if(state.digDeep.grid[y1][x])return false;return true;} return false; }
+function pumpDigDeep(){ const g=state.digDeep;if(g.status!=='playing')return;let target=null,best=99;for(const e of g.enemies){const d=Math.abs(e.x-g.player.x)+Math.abs(e.y-g.player.y);if(d<=3&&(e.x===g.player.x||e.y===g.player.y)&&digDeepClearLine(g.player.x,g.player.y,e.x,e.y)&&d<best){target=e;best=d;}}if(!target){g.message='No creature in a clear tunnel.';updateDigDeepBoard();return;}target.hp--;g.message=target.hp<=0?'Creature popped!':'Pump it again!';if(target.hp<=0){g.enemies=g.enemies.filter(e=>e!==target);g.score+=100;if(!g.enemies.length){finishDigDeep(true);return;}}g.steps++;if(g.steps%2===0)stepDigDeepEnemies();updateDigDeepBoard(); }
+function stepDigDeepEnemies(){ const g=state.digDeep;for(const e of g.enemies){const options=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>({x:e.x+dx,y:e.y+dy,dist:Math.abs(e.x+dx-g.player.x)+Math.abs(e.y+dy-g.player.y)})).filter(p=>digDeepInside(p.x,p.y)&&!g.enemies.some(o=>o!==e&&o.x===p.x&&o.y===p.y));options.sort((a,b)=>a.dist-b.dist);const choice=options.find(p=>!g.grid[p.y][p.x])||options[0];if(choice){e.x=choice.x;e.y=choice.y;g.grid[e.y][e.x]=false;}if(e.x===g.player.x&&e.y===g.player.y){finishDigDeep(false);return;}} }
+function finishDigDeep(won){const g=state.digDeep;g.status=won?'won':'lost';g.message=won?'Tunnel cleared!':'A creature caught you.';const stats=getArcadeStats();if(g.score>stats.digDeepBest)void saveArcadeStats({digDeepBest:g.score});updateDigDeepBoard();}
+function renderDigDeepGame(container){if(!state.digDeep.grid.length||state.digDeep.status!=='playing')resetDigDeepGame();const stats=getArcadeStats();container.innerHTML=`<div class="fc-canvas-game-shell"><div class="fc-arcade-scorebar"><span>Score <strong class="fc-digdeep-score">${state.digDeep.score}</strong></span><span>Creatures <strong class="fc-digdeep-enemies">${state.digDeep.enemies.length}</strong></span><span>Best <strong>${Math.max(stats.digDeepBest,state.digDeep.score)}</strong></span></div><canvas class="fc-game-canvas fc-digdeep-canvas" width="216" height="252" aria-label="Dig Deep game"></canvas><div class="fc-game-status fc-digdeep-status"></div><div class="fc-digdeep-controls"><button type="button" data-dx="0" data-dy="-1"><i class="fa-solid fa-arrow-up"></i></button><button type="button" data-dx="-1" data-dy="0"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="fc-digdeep-pump"><i class="fa-solid fa-burst"></i> Pump</button><button type="button" data-dx="1" data-dy="0"><i class="fa-solid fa-arrow-right"></i></button><button type="button" data-dx="0" data-dy="1"><i class="fa-solid fa-arrow-down"></i></button></div><button type="button" class="fc-arcade-secondary fc-digdeep-new"><i class="fa-solid fa-rotate-right"></i> New Game</button></div>`;container.querySelectorAll('.fc-digdeep-controls button[data-dx]').forEach(b=>b.addEventListener('click',()=>moveDigDeep(Number(b.dataset.dx),Number(b.dataset.dy))));container.querySelector('.fc-digdeep-pump')?.addEventListener('click',pumpDigDeep);container.querySelector('.fc-digdeep-new')?.addEventListener('click',()=>{resetDigDeepGame();updateDigDeepBoard();});updateDigDeepBoard(); }
+function updateDigDeepBoard(){ const c=state.root?.querySelector('.fc-digdeep-canvas');if(!c)return;const ctx=c.getContext('2d'),g=state.digDeep,tile=18;for(let y=0;y<DIG_ROWS;y++)for(let x=0;x<DIG_COLS;x++){ctx.fillStyle=g.grid[y][x]?'#8b5a2b':'#17212e';ctx.fillRect(x*tile,y*tile,tile,tile);if(g.grid[y][x]){ctx.fillStyle='rgba(255,206,120,.08)';ctx.fillRect(x*tile+3,y*tile+3,3,3);}}for(const e of g.enemies){ctx.fillStyle=e.hp===1?'#ff9c64':'#e34f61';ctx.beginPath();ctx.arc(e.x*tile+9,e.y*tile+9,7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(e.x*tile+6,e.y*tile+6,2,2);ctx.fillRect(e.x*tile+10,e.y*tile+6,2,2);}ctx.fillStyle='#63d7ff';ctx.beginPath();ctx.arc(g.player.x*tile+9,g.player.y*tile+9,7,0,Math.PI*2);ctx.fill();ctx.fillStyle='#0b2030';ctx.fillRect(g.player.x*tile+8,g.player.y*tile+4,2,5);const sc=state.root.querySelector('.fc-digdeep-score');if(sc)sc.textContent=String(g.score);const en=state.root.querySelector('.fc-digdeep-enemies');if(en)en.textContent=String(g.enemies.length);const st=state.root.querySelector('.fc-digdeep-status');if(st)st.textContent=g.message; }
+
+// ---------------------------
+// Paint app
+// ---------------------------
+function renderPaintView() {
+  const container=state.root?.querySelector('.fc-paint-content'); if(!container)return;
+  container.innerHTML=`<div class="fc-paint-shell"><div class="fc-paint-toolbar"><div class="fc-paint-tools"><button type="button" class="fc-paint-tool is-active" data-tool="brush"><i class="fa-solid fa-paintbrush"></i> Brush</button><button type="button" class="fc-paint-tool" data-tool="eraser"><i class="fa-solid fa-eraser"></i> Eraser</button></div><div class="fc-paint-colors" aria-label="Paint colors"><button type="button" data-color="#1f2937" style="--swatch:#1f2937"></button><button type="button" data-color="#ef4444" style="--swatch:#ef4444"></button><button type="button" data-color="#f59e0b" style="--swatch:#f59e0b"></button><button type="button" data-color="#22c55e" style="--swatch:#22c55e"></button><button type="button" data-color="#3b82f6" style="--swatch:#3b82f6"></button><button type="button" data-color="#8b5cf6" style="--swatch:#8b5cf6"></button><input class="fc-paint-color-picker" type="color" value="${state.paint.color}" aria-label="Custom color"></div><label class="fc-paint-size"><span>Brush size</span><input type="range" min="2" max="24" step="1" value="${state.paint.size}"><strong>${state.paint.size}px</strong></label></div><canvas class="fc-paint-canvas" width="240" height="300" aria-label="Drawing canvas"></canvas><div class="fc-paint-actions"><button type="button" class="fc-arcade-secondary fc-paint-clear"><i class="fa-solid fa-trash-can"></i> Clear</button><span><i class="fa-solid fa-floppy-disk"></i> Saves automatically</span></div></div>`;
+  const canvas=container.querySelector('.fc-paint-canvas'),ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  const saved=String(game.settings.get(MODULE_ID,PAINT_CANVAS_SETTING)||''); if(saved){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0,canvas.width,canvas.height);img.src=saved;}
+  const setTool=(tool)=>{state.paint.tool=tool;container.querySelectorAll('.fc-paint-tool').forEach(b=>b.classList.toggle('is-active',b.dataset.tool===tool));};setTool(state.paint.tool);
+  container.querySelectorAll('.fc-paint-tool').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+  container.querySelectorAll('[data-color]').forEach(b=>b.addEventListener('click',()=>{state.paint.color=b.dataset.color;const picker=container.querySelector('.fc-paint-color-picker');if(picker)picker.value=state.paint.color;setTool('brush');}));
+  const picker=container.querySelector('.fc-paint-color-picker');picker?.addEventListener('input',()=>{state.paint.color=picker.value;setTool('brush');});
+  const size=container.querySelector('.fc-paint-size input'),sizeLabel=container.querySelector('.fc-paint-size strong');size?.addEventListener('input',()=>{state.paint.size=Number(size.value);sizeLabel.textContent=`${state.paint.size}px`;});
+  const point=(ev)=>{const r=canvas.getBoundingClientRect();return{x:(ev.clientX-r.left)*(canvas.width/r.width),y:(ev.clientY-r.top)*(canvas.height/r.height)};};
+  canvas.addEventListener('pointerdown',(ev)=>{if(ev.button!==0)return;canvas.setPointerCapture(ev.pointerId);state.paint.drawing=true;const p=point(ev);state.paint.lastX=p.x;state.paint.lastY=p.y;ev.preventDefault();});
+  canvas.addEventListener('pointermove',(ev)=>{if(!state.paint.drawing)return;const p=point(ev);ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=state.paint.size;ctx.strokeStyle=state.paint.tool==='eraser'?'#ffffff':state.paint.color;ctx.beginPath();ctx.moveTo(state.paint.lastX,state.paint.lastY);ctx.lineTo(p.x,p.y);ctx.stroke();state.paint.lastX=p.x;state.paint.lastY=p.y;ev.preventDefault();});
+  const finish=()=>{if(!state.paint.drawing)return;state.paint.drawing=false;persistPaintCanvas(canvas);};canvas.addEventListener('pointerup',finish);canvas.addEventListener('pointercancel',finish);
+  container.querySelector('.fc-paint-clear')?.addEventListener('click',()=>{if(!window.confirm('Clear your drawing?'))return;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);persistPaintCanvas(canvas);});
+}
+function persistPaintCanvas(canvas){if(!canvas)return;if(state.paint.saveTimer)clearTimeout(state.paint.saveTimer);state.paint.saveTimer=setTimeout(async()=>{try{await game.settings.set(MODULE_ID,PAINT_CANVAS_SETTING,canvas.toDataURL('image/png'));}catch(error){console.error(`${MODULE_ID} | Could not save Paint canvas`,error);ui.notifications.warn('Paint drawing could not be saved.');}},120);}
 
 function renderSettingsView() {
   const container = state.root?.querySelector(".fc-settings-content");

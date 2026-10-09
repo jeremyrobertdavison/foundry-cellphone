@@ -2,7 +2,7 @@
 
 An immersive in-game cellphone interface for modern Foundry VTT campaigns.
 
-Version **2.9.0** adds **Pocket Pet**, a personal virtual-pet app with real-time needs, care actions, mood, age, and persistent per-client pet progress.
+Version **2.11.0** adds three more Arcade games: **Checkers**, **Blackjack**, and **Solitaire**.
 
 ## Cellphone apps
 
@@ -12,11 +12,12 @@ Version **2.9.0** adds **Pocket Pet**, a personal virtual-pet app with real-time
 - **Browser** — GM-configured external website shortcuts plus permission-aware Foundry Journal search inside the phone.
 - **Notes** — private per-user notes with title/body editing and deletion.
 - **News** — GM-authored headline feed with blurb, publisher, author, and publication date/time.
-- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, Face Flap, Guess My Number, Stack It, Block Drop, Chess, Farkle, and Demon Run.
+- **Arcade** — Snake, Tic Tac Toe, Minesweeper, Runner, Face Flap, Guess My Number, Stack It, Block Drop, Chess, Farkle, Demon Run, Brick Breaker, Paddle Duel, Dig Deep, Checkers, Blackjack, and Solitaire.
 - **Maps** — GM-managed reference maps with character markers and player visibility controls.
 - **Mondo Rides** — GM-controlled downtime Scene travel presented as an in-world ride-share app.
 - **Music** — streaming-style now-playing view with client-only personal Music and Environment volume controls.
 - **Pocket Pet** — hatch and care for a personal virtual pet whose needs change over real elapsed time.
+- **Paint** — a personal drawing canvas with brush, eraser, colors, brush sizing, clear, and automatic saving.
 - **Settings** — per-user phone resizing from 60% to 150%, automatic proportional text scaling, and an optional independent text-size control.
 
 ## Messages
@@ -29,7 +30,7 @@ Mondo Rides turns GM-approved Foundry Scenes into player-selectable downtime des
 
 GMs receive **Manage Destinations**, which lists the world's Scenes with simple on/off switches. Enabling a Scene immediately adds it to Mondo Rides; disabling it immediately removes it from player phones. No Mondo-specific copy of the Scene is created.
 
-When a player requests a ride, the module sends the request through the Foundry module socket to the connected active GM and validates that the destination is still enabled. On Foundry v13, the GM client uses Foundry's player-specific Scene pull API so only the requesting user changes Scene; other players remain where they are and the destination is not globally activated.
+When a player requests a ride, the module sends the request through the Foundry module socket to the connected active GM and validates that the destination is still enabled. On Foundry v13 and v14, the GM client uses Foundry's player-specific Scene pull API so only the requesting user changes Scene; other players remain where they are and the destination is not globally activated. Foundry v14 Scene Levels remain under Foundry's normal scene-view behavior when a user is pulled to a destination.
 
 On Foundry v12, where that core player-specific method is not available on `Scene`, the module falls back to GM-approved client-side Scene viewing. For that fallback, the destination Scene must already be accessible to the player through Foundry's Scene permissions.
 
@@ -80,7 +81,7 @@ The News app is a read-only feed for players. GMs can publish, edit, and delete 
 
 ## Arcade
 
-The Arcade includes eleven lightweight games:
+The Arcade includes seventeen lightweight games:
 
 - **Snake** — keyboard/WASD and on-screen controls, pause/resume, local best score.
 - **Tic Tac Toe** — play against a simple phone AI with local win/loss/draw stats.
@@ -93,8 +94,14 @@ The Arcade includes eleven lightweight games:
 - **Chess** — play White against a lightweight phone AI with legal move validation, check, checkmate, stalemate, captures, and automatic queen promotion. Arcade Chess intentionally omits castling and en passant.
 - **Farkle** — a quick first-to-3000 dice game against the phone with selectable scoring dice, banking, hot dice, farkles, common combination scoring, and local win/loss stats.
 - **Demon Run** — an original compact retro first-person shooter with three ray-cast levels, creatures, health/ammo pickups, shooting, exits, touch controls, and keyboard controls.
+- **Brick Breaker** — a simple breakout-style paddle-and-bricks game with lives and a local best score.
+- **Paddle Duel** — a single-player pong-style match against the phone, first to five points.
+- **Dig Deep** — a turn-based dig-and-pump underground action game with tunnels, roaming creatures, and scoring.
+- **Checkers** — play against the phone with mandatory captures, multi-jumps, king promotion, and local win/loss tracking.
+- **Blackjack** — play standard hit/stand blackjack against a dealer with blackjack, bust, push, and local result tracking.
+- **Solitaire** — one-card-draw Klondike with stock/waste, seven tableau columns, four suit foundations, card flipping, selectable runs, and local win/best-move tracking.
 
-Snake, Runner, Face Flap, Stack It, Block Drop, and Demon Run automatically pause when appropriate, including when leaving Arcade or closing the phone.
+Snake, Runner, Face Flap, Stack It, Block Drop, Demon Run, Brick Breaker, and Paddle Duel automatically pause when appropriate, including when leaving Arcade or closing the phone.
 
 ## Music
 
@@ -108,6 +115,10 @@ The **Pocket Pet** app is a lightweight virtual pet. On first use, the player na
 
 Pocket Pet data is stored as a client-scoped module setting keyed to the current Foundry user ID, matching the personal/local behavior used by Arcade statistics and phone appearance settings. It is gameplay flavor rather than a GM-facing campaign system.
 
+## Paint
+
+The **Paint** app provides a personal 240×300 drawing canvas inside the phone. Players can switch between Brush and Eraser, choose from quick colors or a custom color picker, adjust brush size, clear the canvas, and draw with mouse, pen, or touch input. The current drawing saves automatically as a client-scoped setting so reopening the phone restores the same artwork for that user.
+
 ## Settings
 
 The **Settings** app contains personal cellphone preferences that are stored per Foundry client. **Phone Size** uses a 60%–150% slider with Small, Default, Large, and XL presets. By default, **Follow phone size** is enabled, so enlarging or shrinking the phone also scales cellphone typography proportionally. Players may disable that option and use the separate **Text Size** control, also from 60% to 150%, to make text larger or smaller without changing the physical phone size. Changes preview immediately and affect only the current user's Foundry client. Oversized phone values are automatically constrained to the available browser window.
@@ -115,7 +126,7 @@ The **Settings** app contains personal cellphone preferences that are stored per
 ## Foundry compatibility
 
 - Minimum: Foundry VTT v12
-- Verified target: Foundry VTT v13.350
+- Verified target: Foundry VTT v14.368
 - Module socket namespace enabled for calls, typing indicators, and Mondo Rides dispatch
 
 ## GitHub installation
@@ -150,4 +161,4 @@ foundry-cellphone-v2.4.3.zip
 
 ### Cellphone toolbar button
 
-The cellphone no longer uses a floating launcher. An **Open Cellphone** button is added to Foundry's native Scene Controls tool palette on the left side of the canvas. The phone button is added to each control palette so it remains available regardless of which Scene Control layer is active, and it retains the cellphone unread badge when Foundry re-renders the toolbar.
+The cellphone no longer uses a floating launcher. An **Open Cellphone** button is added to Foundry's native Scene Controls tool palette on the left side of the canvas. The phone button is added to each control palette so it remains available regardless of which Scene Control layer is active, and it retains the cellphone unread badge when Foundry re-renders the toolbar. Foundry v14's Scene Control tool metadata is handled explicitly so the phone remains a button rather than becoming a canvas interaction, control, or creation tool.

@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.12.0
+
+- Updated Foundry Cellphone for **Foundry VTT v14** and verified the package target against v14.368 Stable.
+- Updated the native Scene Controls cellphone launcher for the v14 `SceneControlTool` API, explicitly marking it as a pure button rather than an interaction, control, or creation tool.
+- Reviewed the module's v14-facing integrations for ChatMessage rendering, FilePicker, TextEditor Journal enrichment, module sockets, Playlist/Ambient client volume, and `Scene.pullUsers`.
+- Updated Mondo Rides documentation for Foundry v14 Scene pulling and Scene Levels behavior.
+- Retained the existing compatibility paths for Foundry v12 and v13.
+
+## 2.11.0
+
+- Added **Checkers** to Arcade with mandatory captures, multi-jumps, king promotion, and a phone-controlled opponent.
+- Added **Blackjack** to Arcade with standard hit/stand play against a dealer, blackjack handling, and local win/loss/push stats.
+- Added **Solitaire** to Arcade with a playable one-card-draw Klondike layout, stock/waste, tableau, foundations, card flipping, and local win tracking.
+
+## 2.10.0
+
+- Added **Brick Breaker** (breakout-style), **Paddle Duel** (pong-style), and **Dig Deep**, an original dig-and-pump arcade game inspired by classic underground action games.
+- Added the **Paint** phone app with a drawable canvas, color palette, custom color picker, brush sizes, brush and eraser tools, clear canvas, and automatic per-client persistence.
+- Added local Arcade stats for the three new games.
+
 ## 2.9.0
 
 - Added **Pocket Pet**, a personal virtual-pet app inspired by classic keychain pet games.
